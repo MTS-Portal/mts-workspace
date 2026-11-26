@@ -17,7 +17,7 @@ export function useStore() {
 }
 
 export function StoreFrame({ children }: { children: ReactNode }) {
-  const { slug, requested, query } = useStore();
+  const { requested, query } = useStore();
   const path = useRouterState({ select: (state) => state.location.pathname });
   const [cartOpen, setCartOpen] = useState(false);
   const lines = useCart();

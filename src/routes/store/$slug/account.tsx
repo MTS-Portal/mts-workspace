@@ -3,7 +3,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { StoreFrame, useStore } from "@/components/storefront";
 import { OrderBarcode } from "@/components/order-barcode";
-import { getShopAccount, saveShopProfile, shopLogin, shopLogout, shopRegister } from "@/lib/portal/api";
+import { getShopAccount, saveShopProfile, shopLogin, shopLogout } from "@/lib/portal/api";
 import { day, money, paymentLabel } from "@/lib/portal/format";
 import { setShopToken, useShopToken } from "@/lib/portal/shop-session";
 import { Button, Field, Input } from "@/components/ui";
@@ -40,15 +40,13 @@ function Account() {
     queryFn: () => getShopAccount({ data: token }),
     enabled: Boolean(token),
   });
-  const [mode, setMode] = useState<"in" | "up">("in");
-  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [openId, setOpenId] = useState<number | null>(null);
 
   const auth = useMutation({
-    mutationFn: () => (mode === "up" ? shopRegister({ data: { name, email, password } }) : shopLogin({ data: { email, password } })),
+    mutationFn: () => shopLogin({ data: { email, password } }),
     onSuccess: (result) => {
       setShopToken(result.token);
       setPassword("");
@@ -77,25 +75,22 @@ function Account() {
             auth.mutate();
           }}
         >
-          {mode === "up" ? (
-            <Field label="Name">
-              <Input value={name} onChange={(event) => setName(event.target.value)} required autoComplete="name" />
-            </Field>
-          ) : null}
           <Field label="Email">
             <Input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" />
           </Field>
           <Field label="Password" hint="At least 8 characters.">
-            <Input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required minLength={8} autoComplete={mode === "up" ? "new-password" : "current-password"} />
+            <Input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required minLength={8} autoComplete="current-password" />
           </Field>
           {error ? <p className="text-sm text-bad">{error}</p> : null}
-          <Button type="submit" disabled={auth.isPending}>{auth.isPending ? "Working" : mode === "up" ? "Create account" : "Sign in"}</Button>
+          <Button type="submit" disabled={auth.isPending}>{auth.isPending ? "Working" : "Sign in"}</Button>
         </form>
-        <button type="button" className="text-left text-sm text-muted">
-          New accounts are created in Zendesk, then they can sign in here.
-        </button>
+        <p className="text-sm text-muted">New accounts are created in Zendesk, then they can sign in here.</p>
       </main>
     );
+  }
+
+  if (account.isError) {
+    return <main className="grid min-h-48 place-items-center px-4 py-16 text-center text-sm text-bad">{account.error instanceof Error ? account.error.message : "Could not load your account."}</main>;
   }
 
   if (account.isPending || !account.data) {

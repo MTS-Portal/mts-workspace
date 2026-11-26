@@ -10,22 +10,6 @@ import { allowTransition, confirmationFresh, confirmSnapshot, followUp, listPick
 
 type Guide = { to: "/portal" | "/portal/tickets" | "/portal/tickets/new" | "/portal/shop" | "/portal/orders" | "/portal/billing" | "/portal/complaints" | "/portal/organization" | "/portal/account" | "/portal/my-services" | "/portal/quotes" | "/portal/notifications"; guide: string; label: string; ticketId?: string };
 
-function pageFor(planned: Planned): Guide | null {
-  const id =
-    planned.tool === "list_tickets" || planned.tool === "open_ticket" || planned.tool === "reply_ticket" || planned.tool === "ticket_detail" || planned.tool === "close_ticket" || planned.tool === "refresh_ticket" ? "tickets"
-    : planned.tool === "list_orders" || planned.tool === "order_detail" || planned.tool === "cancel_order" || planned.tool === "pay_order" || planned.tool === "place_order" ? "orders"
-    : planned.tool === "find_equipment" || planned.tool === "order_service" || planned.tool === "list_catalog" ? "shop"
-    : planned.tool === "complaint" ? "complaints"
-    : planned.tool === "account" || planned.tool === "update_contact" || planned.tool === "update_company" ? "account"
-    : planned.tool === "list_billing" ? "billing"
-    : planned.tool === "list_notices" || planned.tool === "read_notice" ? "notifications"
-    : planned.tool === "list_requests" ? "services"
-    : "";
-  if (!id) return null;
-  const page = pageById(id);
-  return { to: page.to, guide: page.guide, label: page.label };
-}
-
 type Row = Record<string, unknown>;
 
 function s(row: Row | undefined, key: string) {

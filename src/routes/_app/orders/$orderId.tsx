@@ -27,11 +27,15 @@ type DraftLine = {
 function printAwb(number: string) {
   const label = document.getElementById("awb-label");
   if (!label) return;
-  const popup = window.open("", "awb", "noopener,noreferrer,width=480,height=720");
+  // No "noopener" here: with it, window.open() returns null and we could never
+  // write the label into the window. Cut the opener link by hand instead.
+  const popup = window.open("", "awb", "width=480,height=720");
   if (!popup) return;
-  popup.document.write(`<!doctype html><meta charset="utf-8"><title>${number} air waybill</title>
+  popup.opener = null;
+  const title = number.replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
+  popup.document.write(`<!doctype html><meta charset="utf-8"><title>${title} air waybill</title>
     <style>body{margin:28px;font-family:Helvetica,sans-serif;color:#111}svg{width:100%;height:auto}p{text-align:center}</style>
-    ${label.innerHTML}<script>addEventListener("load",()=>print())<\/script>`);
+    ${label.innerHTML}<script>addEventListener("load",()=>print())</script>`);
   popup.document.close();
 }
 

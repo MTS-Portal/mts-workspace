@@ -11,6 +11,7 @@ import { setShopToken, useShopToken } from "@/lib/portal/shop-session";
 import { useCart } from "@/lib/portal/store-cart";
 import { usePortalLive } from "@/lib/portal/use-portal-live";
 import { PortalAtmosphere } from "@/components/portal-atmosphere";
+import { visibleTabsForRole } from "@/lib/portal/customer-tabs";
 
 const NAV = [
   { to: "/portal", label: "Home", icon: House, exact: true, guide: "home" },
@@ -25,8 +26,6 @@ const NAV = [
 
 type TabTo = (typeof NAV)[number]["to"];
 const TAB_ORDER_KEY = "mts-portal-tab-order";
-/** Customers with no desk role only see these tabs. */
-const CUSTOMER_TABS: ReadonlySet<string> = new Set<string>(["/portal", "/portal/tickets"]);
 
 function defaultOrder(): TabTo[] {
   return NAV.map((item) => item.to);
@@ -59,7 +58,11 @@ function useTabOrder() {
       const next = current.filter((item) => item !== from);
       const index = next.indexOf(target);
       next.splice(index < 0 ? next.length : index, 0, from);
-      localStorage.setItem(TAB_ORDER_KEY, JSON.stringify(next));
+      try {
+        localStorage.setItem(TAB_ORDER_KEY, JSON.stringify(next));
+      } catch {
+        // Storage can be blocked (private mode, sandboxed iframe); keep the order in memory.
+      }
       return next;
     });
   }
@@ -115,7 +118,8 @@ export function PortalShell({ children }: { children: ReactNode }) {
   const count = cart.reduce((sum, line) => sum + line.quantity, 0);
   const { tabs, drag, move } = useTabOrder();
   const customerOnly = Boolean(home.data && !home.data.desk);
-  const visibleTabs = customerOnly ? tabs.filter((item) => CUSTOMER_TABS.has(item.to)) : tabs;
+  // Customers with no desk role only see Home + Tickets.
+  const visibleTabs = visibleTabsForRole(tabs, customerOnly);
   const mobileTabs = visibleTabs.slice(0, 5);
 
   return (

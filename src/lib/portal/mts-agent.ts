@@ -207,10 +207,6 @@ function obj(value: unknown): Row {
   return value && typeof value === "object" ? (value as Row) : {};
 }
 
-function keepChat(ids: string[]) {
-  return ids.filter((id) => id && !/clef|embed|whisper|systemone|decider/i.test(id));
-}
-
 function ollamaCreditMessage() {
   return "Ollama Cloud accepted the key, but this account has no usage credits. Add credits or a plan at https://ollama.com/plans, then send again.";
 }
@@ -482,10 +478,6 @@ const KNOWN_FREE: Partial<Record<ProviderId, RegExp>> = {
   groq: /(^|\/)(qwen3\.8-27b|qwen-3\.8-27b|gpt-oss-120b|gpt-oss-20b|allam-2-7b)$/i,
   cerebras: /(^|\/)(gpt-oss-120b|qwen-3\.8-27b|qwen3\.8-27b)$/i,
 };
-
-function pinFirst(ids: string[], pattern: RegExp) {
-  return [...ids.filter((id) => pattern.test(id)), ...ids.filter((id) => !pattern.test(id))];
-}
 
 type ListedModel = { id: string; free: boolean; label: string };
 
@@ -1231,12 +1223,6 @@ async function runTool(sql: Sql, actor: DeskUser, name: string, raw: unknown) {
 function numberArg(value: unknown) {
   const number = Number(value);
   return Number.isInteger(number) && number > 0 ? number : 0;
-}
-
-function assignedTo(actor: DeskUser, row: Row) {
-  const assignee = s(row, "assignee").trim().toLowerCase();
-  if (!assignee) return false;
-  return [actor.name, actor.email].some((value) => value.trim().toLowerCase() === assignee);
 }
 
 function canWrite(actor: DeskUser) {

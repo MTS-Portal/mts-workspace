@@ -69,7 +69,7 @@ export function NewTicket() {
   const [values, setValues] = useState<Record<string, string>>({});
   const [notice, setNotice] = useState("");
   const forms = schema.data?.forms ?? [];
-  const fields = schema.data?.fields ?? [];
+  const fields = useMemo(() => schema.data?.fields ?? [], [schema.data?.fields]);
   const selected = forms.find((form) => form.id === formId) || forms[0];
   const shown = useMemo(() => applyConditions(fields, selected, values), [fields, selected, values]);
   const send = useMutation({

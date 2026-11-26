@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { getIntegration, getSarahMetrics, runDeskJobs, saveIntegration, syncPortalUsers, syncZendesk, testIntegration } from "@/lib/portal/api";
+import { getIntegration, getSarahMetrics, runDeskJobs, saveIntegration, syncZendesk, testIntegration } from "@/lib/portal/api";
 import { ago } from "@/lib/portal/format";
 import { Badge, Button, ErrorNote, Field, Input, Loading, PageHeader, Panel, Toggle, errorText } from "@/components/ui";
 

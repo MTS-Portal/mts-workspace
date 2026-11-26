@@ -132,7 +132,7 @@ export function OrderPage() {
   const [drops, setDrops] = useState(1);
   const [done, setDone] = useState("");
   const [error, setError] = useState("");
-  const products = shop.data?.products ?? [];
+  const products = useMemo(() => shop.data?.products ?? [], [shop.data?.products]);
   const categories = useMemo(() => ["all", ...new Set(products.map((item) => item.category).filter(Boolean))], [products]);
   const visible = products.filter((item) => {
     const blob = `${item.name} ${item.sku} ${item.category}`.toLowerCase();

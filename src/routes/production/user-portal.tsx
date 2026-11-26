@@ -25,7 +25,13 @@ function ProductionPortalLayout() {
     enabled: Boolean(user),
     retry: false,
   });
-  if (typeof window !== "undefined") sessionStorage.setItem("mts-production-portal", "1");
+  if (typeof window !== "undefined") {
+    try {
+      sessionStorage.setItem("mts-production-portal", "1");
+    } catch {
+      // Storage blocked (sandboxed iframe / private mode): legacy-path rewrites just stay off.
+    }
+  }
   useEffect(() => {
     if (link.data?.token && link.data.token !== token) setShopToken(link.data.token);
   }, [link.data?.token, token]);

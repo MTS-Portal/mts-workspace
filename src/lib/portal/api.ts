@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { publishLive } from "@/lib/portal/live";
-import { DEFAULT_EMAIL_SIGNATURE, htmlMailTemplate, renderSignature, signatureHtml, textMailTemplate } from "@/lib/portal/email-signature";
+import { DEFAULT_EMAIL_SIGNATURE, htmlMailTemplate, signatureHtml, textMailTemplate } from "@/lib/portal/email-signature";
 import { ORDER_MENU } from "@/lib/portal/order-menu";
 import { customerCanFill } from "@/lib/portal/zendesk-field-types";
 import { authMiddleware } from "@/lib/auth/middleware";
@@ -22,14 +22,12 @@ import { mtsAuthPublic } from "./mts-oauth";
 import { lookupAwb } from "./ups";
 import { customerBySession, listCustomerSessions, openCustomerSession, revokeCurrentCustomerSession, revokeCustomerSession, revokeOtherCustomerSessions } from "./sessions";
 import {
-  applyPaymentStatus,
   dueJobs,
   enqueueJob,
   finishJob,
   invoiceAttachment,
   ensureSellableStock,
   orderEvents,
-  readAlternativeEvent,
   rebalanceHold,
   recordEvent,
   resendStoredEmail,
@@ -37,7 +35,6 @@ import {
   resolveMail,
   sendOrderEmail,
   setInventory,
-  verifyAlternativeSignature,
 } from "./commerce";
 import type {
   Actor,
@@ -49,7 +46,6 @@ import type {
   Notice,
   Order,
   OrderDraft,
-  OrderEvent,
   OrderItem,
   Org,
   OrgDetail,
@@ -61,7 +57,6 @@ import type {
   ServiceItem,
   ServiceRequest,
   PortalTicket,
-  PortalSettings,
   Product,
   Role,
   ShellInfo,

@@ -21,7 +21,13 @@ function ProductionAdminLayout() {
     queryFn: () => getSessionHome(),
     enabled: Boolean(user),
   });
-  if (typeof window !== "undefined") sessionStorage.setItem("mts-production-admin", "1");
+  if (typeof window !== "undefined") {
+    try {
+      sessionStorage.setItem("mts-production-admin", "1");
+    } catch {
+      // Storage blocked (sandboxed iframe / private mode): legacy-path rewrites just stay off.
+    }
+  }
   useEffect(() => {
     function onClick(event: MouseEvent) {
       if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
