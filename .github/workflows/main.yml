@@ -31,4 +31,4 @@ jobs:
           src/lib/portal/sarah-state.test.ts
           src/lib/portal/zendesk-shape.test.ts
           src/lib/portal/mts-oauth.test.ts
-          src/lib/portal/customer-tabs.test.ts
+          src/lib/portal/permissions/resolve.test.ts
