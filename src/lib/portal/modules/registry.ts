@@ -75,7 +75,7 @@ const EVERYONE: readonly PortalRole[] = PORTAL_ROLES;
 export const MODULES: readonly ModuleDef[] = [
   { id: "home", label: "Home", route: "/portal", routes: ["/portal"], exact: true, icon: "house", category: "Support", defaultRoles: EVERYONE, required: true, guide: "home" },
   { id: "tickets", label: "Tickets", route: "/portal/tickets", routes: ["/portal/tickets"], icon: "ticket", category: "Support", entitlement: "ticket", defaultRoles: EVERYONE, guide: "tickets" },
-  { id: "order", label: "Order", route: "/portal/shop", routes: ["/portal/shop", "/portal/checkout", "/portal/product"], icon: "shopping-bag", category: "Commerce", entitlement: "shop", defaultRoles: STAFF, guide: "order" },
+  { id: "order", label: "Order", route: "/portal/shop", routes: ["/portal/shop", "/portal/checkout", "/portal/product"], icon: "shopping-bag", category: "Commerce", entitlement: "shop", defaultRoles: [], guide: "order" },
   { id: "billing", label: "Billing", route: "/portal/billing", routes: ["/portal/billing"], icon: "receipt", category: "Commerce", entitlement: "billing", defaultRoles: STAFF, guide: "billing" },
   { id: "account", label: "Account", route: "/portal/account", routes: ["/portal/account"], icon: "settings", category: "Account", defaultRoles: EVERYONE, guide: "account" },
   { id: "orders", label: "Orders", route: "/portal/orders", routes: ["/portal/orders"], icon: "package", category: "Commerce", entitlement: "shop", defaultRoles: STAFF, guide: "orders" },

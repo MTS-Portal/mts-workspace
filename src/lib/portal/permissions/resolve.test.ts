@@ -32,14 +32,25 @@ test("a module can be in the menu only while it is turned on", () => {
   assert.equal(config.roles.customer.modules.find((item) => item.id === "complaints")?.nav, false);
 });
 
-test("default staff workspace keeps the previous desk tabs", () => {
+test("default staff workspace keeps the previous desk tabs, minus the shop (Order is off by default)", () => {
   for (const role of ["viewer", "agent", "admin", "owner"] as const) {
     const workspace = resolveWorkspace(defaultPortalConfig(), role, ALL_ENTITLEMENTS);
     assert.deepEqual(
       workspace.modules.filter((item) => item.nav).map((item) => item.id),
-      ["home", "tickets", "order", "billing", "account", "orders", "complaints", "organization"],
+      ["home", "tickets", "billing", "account", "orders", "complaints", "organization"],
       role,
     );
+  }
+});
+
+test("products are hidden by default for every role: no shop, product, cart, or checkout, and no catalog AI tools", () => {
+  for (const role of ["customer", "viewer", "agent", "admin", "owner"] as const) {
+    const workspace = resolveWorkspace(defaultPortalConfig(), role, ALL_ENTITLEMENTS);
+    for (const path of ["/production/user-portal/shop", "/production/user-portal/product/ABC-1", "/production/user-portal/checkout"]) {
+      assert.equal(canAccessPath(workspace, path), false, `${role} ${path}`);
+    }
+    assert.ok(!workspace.widgets.some((item) => item.id === "equipment"), role);
+    for (const tool of ["search_catalog", "order_product", "find_equipment", "list_catalog", "place_order"]) assert.equal(canUseAiTool(workspace, tool), false, `${role} ${tool}`);
   }
 });
 
@@ -149,6 +160,7 @@ test("AI: customers never get staff-only tools, even with every family switched 
 
 test("AI: a tool follows its module — hiding Order removes purchasing tools", () => {
   const config = defaultPortalConfig();
+  config.roles.owner.modules.find((item) => item.id === "order")!.enabled = true;
   const owner = resolveWorkspace(config, "owner", ALL_ENTITLEMENTS);
   assert.equal(canUseAiTool(owner, "order_product"), true);
   config.roles.owner.modules.find((item) => item.id === "order")!.enabled = false;
