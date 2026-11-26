@@ -101,7 +101,7 @@ function defaultRole(role: PortalRole): RoleConfig {
   }
   return {
     modules,
-    widgets: WIDGETS.map((item) => ({ id: item.id, enabled: item.defaultOn, size: item.defaultSize })),
+    widgets: WIDGETS.map((item) => ({ id: item.id, enabled: item.defaultRoles ? item.defaultRoles.includes(role) : item.defaultOn, size: item.defaultSize })),
     landing: "home",
     ai: { chat: true, voice: true, assistant: true, families: defaultAiFamilies(role === "customer") },
   };
@@ -152,7 +152,8 @@ function normalizeRole(input: z.infer<typeof roleConfig> | undefined, role: Port
     if (!def || seenWidgets.has(def.id)) continue;
     seenWidgets.add(def.id);
     const size = (WIDGET_SIZES as readonly string[]).includes(raw.size ?? "") ? (raw.size as WidgetSize) : def.defaultSize;
-    widgets.push({ id: def.id, enabled: raw.enabled ?? def.defaultOn, size });
+    const base = fallback.widgets.find((item) => item.id === def.id);
+    widgets.push({ id: def.id, enabled: raw.enabled ?? base?.enabled ?? def.defaultOn, size });
   }
   for (const base of fallback.widgets) if (!seenWidgets.has(base.id)) widgets.push(base);
 

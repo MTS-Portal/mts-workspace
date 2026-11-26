@@ -75,7 +75,7 @@ const EVERYONE: readonly PortalRole[] = PORTAL_ROLES;
 export const MODULES: readonly ModuleDef[] = [
   { id: "home", label: "Home", route: "/portal", routes: ["/portal"], exact: true, icon: "house", category: "Support", defaultRoles: EVERYONE, required: true, guide: "home" },
   { id: "tickets", label: "Tickets", route: "/portal/tickets", routes: ["/portal/tickets"], icon: "ticket", category: "Support", entitlement: "ticket", defaultRoles: EVERYONE, guide: "tickets" },
-  { id: "order", label: "Order", route: "/portal/shop", routes: ["/portal/shop", "/portal/checkout", "/portal/product"], icon: "shopping-bag", category: "Commerce", entitlement: "shop", defaultRoles: [], guide: "order" },
+  { id: "order", label: "Order", route: "/portal/shop", routes: ["/portal/shop", "/portal/checkout", "/portal/product"], icon: "shopping-bag", category: "Commerce", entitlement: "shop", defaultRoles: STAFF, guide: "order" },
   { id: "billing", label: "Billing", route: "/portal/billing", routes: ["/portal/billing"], icon: "receipt", category: "Commerce", entitlement: "billing", defaultRoles: STAFF, guide: "billing" },
   { id: "account", label: "Account", route: "/portal/account", routes: ["/portal/account"], icon: "settings", category: "Account", defaultRoles: EVERYONE, guide: "account" },
   { id: "orders", label: "Orders", route: "/portal/orders", routes: ["/portal/orders"], icon: "package", category: "Commerce", entitlement: "shop", defaultRoles: STAFF, guide: "orders" },
@@ -105,6 +105,8 @@ export type WidgetDef = {
   defaultSize: WidgetSize;
   /** Enabled in the default configuration. */
   defaultOn: boolean;
+  /** Roles that get it on by default, overriding `defaultOn`. */
+  defaultRoles?: readonly PortalRole[];
 };
 
 export const WIDGETS: readonly WidgetDef[] = [
@@ -116,7 +118,8 @@ export const WIDGETS: readonly WidgetDef[] = [
   { id: "unpaid", label: "Unpaid invoices", description: "Orders on pay-later or unpaid.", module: "billing", defaultSize: "sm", defaultOn: true },
   { id: "profile", label: "User profile", description: "Contact, company, role, and billing details.", module: "account", defaultSize: "full", defaultOn: true },
   { id: "quick-actions", label: "Quick support actions", description: "Shortcuts to create a ticket and view orders.", module: "home", defaultSize: "full", defaultOn: true },
-  { id: "equipment", label: "Equipment catalog", description: "Four products from the shop.", module: "order", defaultSize: "full", defaultOn: false },
+  // Products on the home page: staff only by default; customers never see them unless an admin turns it on.
+  { id: "equipment", label: "Equipment catalog", description: "Four products from the shop.", module: "order", defaultSize: "full", defaultOn: false, defaultRoles: ["viewer", "agent", "admin", "owner"] },
   { id: "recent-tickets", label: "Recent tickets", description: "The four latest tickets.", module: "tickets", defaultSize: "md", defaultOn: true },
   { id: "recent-orders", label: "Recent orders", description: "The four latest orders.", module: "orders", defaultSize: "md", defaultOn: true },
 ] as const;

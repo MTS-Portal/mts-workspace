@@ -62,9 +62,9 @@ A module that is on but not in the menu still opens from links, notifications, c
 | Role | In the menu by default | On, link-only |
 |---|---|---|
 | Customer | Home, Tickets, Account, Notifications | My services, Quotes, Campaigns |
-| Viewer / Agent / Admin / Owner | Home, Tickets, Billing, Account, Orders, Complaints, Organization | Notifications (header bell), My services, Quotes, Campaigns |
+| Viewer / Agent / Admin / Owner | Home, Tickets, Order, Billing, Account, Orders, Complaints, Organization | Notifications (header bell), My services, Quotes, Campaigns |
 
-**Order (shop, product pages, cart, checkout) is off for every role by default**, so no products appear in the User Portal. Turn it on per role in Portal Studio → Navigation. My services and Quotes also require the account's managed-services access. The Equipment catalog widget is off by default. The `/call` page follows the role's **Voice calls** AI setting rather than a module.
+**Products are hidden from customers by default.** The Order module (shop, product pages, cart, checkout) and the home-page Equipment catalog widget are off for the Customer role and on for staff. Change either per role in Portal Studio. My services and Quotes also require the account's managed-services access. The Equipment catalog widget is off by default. The `/call` page follows the role's **Voice calls** AI setting rather than a module.
 
 ## Permission matrix (what this pass enforces)
 
