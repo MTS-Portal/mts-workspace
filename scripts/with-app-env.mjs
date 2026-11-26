@@ -22,7 +22,7 @@
 import { spawn } from "node:child_process";
 import { readFileSync, realpathSync } from "node:fs";
 import { constants as osConstants } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const APP_ENV_REL_PATH = ".grok/app-env.json";
@@ -104,6 +104,11 @@ export function isMainModule(moduleUrl) {
   }
 }
 
+/** Quote one argument for a `cmd.exe` command line when it needs it. */
+function quoteWindowsArg(arg) {
+  return /[\s"&|<>^()]/.test(arg) ? `"${arg.replace(/"/g, '""')}"` : arg;
+}
+
 function main(argv) {
   const [command, ...args] = argv;
   if (!command) {
@@ -111,7 +116,12 @@ function main(argv) {
     process.exit(2);
   }
   const env = mergeAppEnv(readAppEnv(projectRoot()), process.env);
-  const child = spawn(command, args, { stdio: "inherit", env });
+  // Windows resolves a bare npm bin name (`vite` -> `vite.cmd`) only through a
+  // shell. An absolute path runs directly, exactly as on other platforms.
+  const child =
+    process.platform === "win32" && !isAbsolute(command)
+      ? spawn([command, ...args].map(quoteWindowsArg).join(" "), { stdio: "inherit", env, shell: true })
+      : spawn(command, args, { stdio: "inherit", env });
   // The dev server is long-running and is stopped by signalling this wrapper.
   for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
     process.on(signal, () => child.kill(signal));
