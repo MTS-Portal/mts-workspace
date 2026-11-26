@@ -1,5 +1,6 @@
 const ADMIN_ROOTS = [
   "/notifications",
+  "/portal-builder",
   "/tickets",
   "/operations",
   "/orders",

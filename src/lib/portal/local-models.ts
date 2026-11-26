@@ -1,4 +1,3 @@
-import { execFile } from "node:child_process";
 
 export type LocalProvider = "ollama-local" | "opencode-local";
 
@@ -27,7 +26,10 @@ export function localOrigin(provider: LocalProvider, stored = "") {
   return url.origin;
 }
 
-function runCli(command: string, args: string[], timeout = 8000) {
+async function runCli(command: string, args: string[], timeout = 8000) {
+  // Imported on demand: a static import reaches the browser bundle (via mts-agent.ts)
+  // and Vite's child_process stub throws as soon as the module loads.
+  const { execFile } = await import("node:child_process");
   return new Promise<string>((resolve, reject) => {
     execFile(command, args, { timeout, maxBuffer: 1_000_000 }, (error, stdout, stderr) => {
       if (stdout.trim()) resolve(stdout);

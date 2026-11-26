@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { publishLive } from "@/lib/portal/live";
-import { DEFAULT_EMAIL_SIGNATURE, htmlMailTemplate, renderSignature, signatureHtml, textMailTemplate } from "@/lib/portal/email-signature";
+import { DEFAULT_EMAIL_SIGNATURE, htmlMailTemplate, signatureHtml, textMailTemplate } from "@/lib/portal/email-signature";
 import { ORDER_MENU } from "@/lib/portal/order-menu";
 import { customerCanFill } from "@/lib/portal/zendesk-field-types";
 import { authMiddleware } from "@/lib/auth/middleware";
@@ -22,14 +22,12 @@ import { mtsAuthPublic } from "./mts-oauth";
 import { lookupAwb } from "./ups";
 import { customerBySession, listCustomerSessions, openCustomerSession, revokeCurrentCustomerSession, revokeCustomerSession, revokeOtherCustomerSessions } from "./sessions";
 import {
-  applyPaymentStatus,
   dueJobs,
   enqueueJob,
   finishJob,
   invoiceAttachment,
   ensureSellableStock,
   orderEvents,
-  readAlternativeEvent,
   rebalanceHold,
   recordEvent,
   resendStoredEmail,
@@ -37,7 +35,6 @@ import {
   resolveMail,
   sendOrderEmail,
   setInventory,
-  verifyAlternativeSignature,
 } from "./commerce";
 import type {
   Actor,
@@ -49,7 +46,6 @@ import type {
   Notice,
   Order,
   OrderDraft,
-  OrderEvent,
   OrderItem,
   Org,
   OrgDetail,
@@ -61,7 +57,6 @@ import type {
   ServiceItem,
   ServiceRequest,
   PortalTicket,
-  PortalSettings,
   Product,
   Role,
   ShellInfo,
@@ -416,16 +411,25 @@ const ORDER_SELECT = `
   left join tickets t on t.id = o.ticket_id
 `;
 
+/** The env-configured owner address. No hardcoded fallback: unset means nobody is auto-promoted. */
 function portalOwnerEmail() {
-  return (process.env.ZENDESK_EMAIL || process.env.BOOTSTRAP_OWNER_EMAIL || "admin@abitech.site").trim().toLowerCase();
+  return (process.env.ZENDESK_EMAIL || process.env.BOOTSTRAP_OWNER_EMAIL || "").trim().toLowerCase();
 }
 
 function isPortalOwner(email: string) {
-  return email.trim().toLowerCase() === portalOwnerEmail();
+  const owner = portalOwnerEmail();
+  return Boolean(owner) && email.trim().toLowerCase() === owner;
+}
+
+/** Owner by email only counts when the sign-in provider verified that email. */
+async function verifiedPortalOwner(sql: Sql, userId: string, email: string) {
+  if (!userId || !isPortalOwner(email)) return false;
+  const rows = await sql<Row>`select "emailVerified" as verified from "user" where id = ${userId} limit 1`;
+  return Boolean(rows[0] && b(rows[0], "verified"));
 }
 
 async function promoteDeskOwner(sql: Sql, userId: string, name: string, email: string) {
-  if (!userId || !isPortalOwner(email)) return;
+  if (!(await verifiedPortalOwner(sql, userId, email))) return;
   await sql`
     insert into portal_staff (user_id, name, email, role, active)
     values (${userId}, ${name || email}, ${email.trim().toLowerCase()}, 'owner', true)
@@ -446,7 +450,7 @@ async function promoteDeskOwner(sql: Sql, userId: string, name: string, email: s
   `;
 }
 
-async function loadActor(sql: Sql, userId: string): Promise<Actor> {
+export async function loadActor(sql: Sql, userId: string): Promise<Actor> {
   const users = await sql<Row>`select id, name, email from "user" where id = ${userId}`;
   const user = users[0];
   const name = user ? s(user, "name") || "Staff" : "Staff";
@@ -467,7 +471,7 @@ async function loadActor(sql: Sql, userId: string): Promise<Actor> {
     where user_id = ${userId}
   `;
   const actor = mapActor({ ...row, name, email: email || s(row, "email") });
-  if (isPortalOwner(actor.email)) {
+  if (await verifiedPortalOwner(sql, userId, actor.email)) {
     return { ...actor, role: "owner", active: true, organizationId: null, organizationName: null };
   }
   if (!actor.active) throw new Error("This account is deactivated.");
@@ -481,7 +485,7 @@ function assertWrite(actor: Actor) {
   if (actor.role === "viewer") throw new Error("You have view-only access.");
 }
 
-function assertAdmin(actor: Actor) {
+export function assertAdmin(actor: Actor) {
   assertWrite(actor);
   if (actor.role !== "owner" && actor.role !== "admin") {
     throw new Error("An admin has to make that change.");
@@ -498,7 +502,7 @@ function assertOrg(actor: Actor, organizationId: number | null) {
   }
 }
 
-async function audit(sql: Sql, actor: Actor, action: string, target: string, detail: string) {
+export async function audit(sql: Sql, actor: Actor, action: string, target: string, detail: string) {
   await sql`
     insert into audit_logs (actor_user_id, actor_name, action, target, detail)
     values (${actor.userId}, ${actor.name}, ${action}, ${target}, ${detail})
@@ -1889,51 +1893,60 @@ export const getSessionHome = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     const sql = await getSql();
-    const rows = await sql<Row>`select role, active from portal_staff where user_id = ${context.userId} limit 1`;
-    const row = rows[0];
-    const users = await sql<Row>`select name, email from "user" where id = ${context.userId} limit 1`;
-    const user = users[0];
-    const email = user ? s(user, "email").toLowerCase() : "";
-    if (!row) {
-      const any = await sql<Row>`select count(*)::int as n from portal_staff`;
-      const empty = (any[0] ? n(any[0], "n") : 0) === 0;
-      const allow = (process.env.BOOTSTRAP_OWNER_EMAIL || "").trim().toLowerCase();
-      if (empty && allow && email === allow) {
-        await sql`
-          insert into portal_staff (user_id, name, email, role)
-          values (${context.userId}, ${user ? s(user, "name") : "Owner"}, ${email}, 'owner')
-          on conflict (user_id) do nothing
-        `;
-        return { destination: "portal" as const, desk: true, role: "owner" };
-      }
-    }
-    let role = row && b(row, "active") ? s(row, "role") : "";
-    if (role !== "owner" && role !== "admin" && role !== "agent" && email) {
-      const remote = await zendeskDeskRole(sql, email);
-      if (remote) {
-        role = remote;
-        await sql`
-          insert into portal_staff (user_id, name, email, role, active)
-          values (${context.userId}, ${user ? s(user, "name") : email}, ${email}, ${remote}, true)
-          on conflict (user_id) do update set
-            role = case when portal_staff.role = 'owner' then portal_staff.role else excluded.role end,
-            active = true,
-            email = excluded.email
-        `;
-      }
-    }
-    const desk = role === "owner" || role === "admin" || role === "agent";
-    const ownerEmail = portalOwnerEmail();
-    if (email && email === ownerEmail) {
-      await sql`
-        insert into portal_staff (user_id, name, email, role, active)
-        values (${context.userId}, ${user ? s(user, "name") : email}, ${email}, 'owner', true)
-        on conflict (user_id) do update set role = 'owner', active = true, email = excluded.email
-      `;
-      return { destination: "portal" as const, desk: true, role: "owner" };
-    }
-    return { destination: "portal" as const, desk, role: desk ? role : "" };
+    const role = await resolveDeskRole(sql, context.userId);
+    return { destination: "portal" as const, desk: role !== "", role };
   });
+
+/**
+ * The signed-in user's staff role: "owner" | "admin" | "agent" | "viewer", or "" for customers.
+ *
+ * Zendesk auto-provisioning only runs for people with no `portal_staff` row at
+ * all. A deactivated or downgraded row is a decision an admin made, so a
+ * Zendesk agent role never silently restores it.
+ */
+export async function resolveDeskRole(sql: Sql, userId: string): Promise<Role | ""> {
+  const rows = await sql<Row>`select role, active from portal_staff where user_id = ${userId} limit 1`;
+  const row = rows[0];
+  const users = await sql<Row>`select name, email from "user" where id = ${userId} limit 1`;
+  const user = users[0];
+  const email = user ? s(user, "email").toLowerCase() : "";
+  const name = user ? s(user, "name") : "";
+  if (email && (await verifiedPortalOwner(sql, userId, email))) {
+    await sql`
+      insert into portal_staff (user_id, name, email, role, active)
+      values (${userId}, ${name || email}, ${email}, 'owner', true)
+      on conflict (user_id) do update set role = 'owner', active = true, email = excluded.email
+    `;
+    return "owner";
+  }
+  if (row) {
+    if (!b(row, "active")) return "";
+    const role = s(row, "role");
+    return role === "owner" || role === "admin" || role === "agent" || role === "viewer" ? role : "";
+  }
+  const any = await sql<Row>`select count(*)::int as n from portal_staff`;
+  const empty = (any[0] ? n(any[0], "n") : 0) === 0;
+  const allow = (process.env.BOOTSTRAP_OWNER_EMAIL || "").trim().toLowerCase();
+  if (empty && allow && email === allow) {
+    await sql`
+      insert into portal_staff (user_id, name, email, role)
+      values (${userId}, ${name || "Owner"}, ${email}, 'owner')
+      on conflict (user_id) do nothing
+    `;
+    return "owner";
+  }
+  if (!email) return "";
+  const remote = await zendeskDeskRole(sql, email);
+  if (remote !== "admin" && remote !== "agent" && remote !== "owner") return "";
+  // New staff from Zendesk start no higher than admin; owner is granted by an owner.
+  const granted: Role = remote === "owner" ? "admin" : remote;
+  await sql`
+    insert into portal_staff (user_id, name, email, role, active)
+    values (${userId}, ${name || email}, ${email}, ${granted}, true)
+    on conflict (user_id) do nothing
+  `;
+  return granted;
+}
 
 export const openPortalFromAuth = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
@@ -5135,6 +5148,8 @@ export const saveStaff = createServerFn({ method: "POST" })
     const rows = await sql<Row>`select * from portal_staff where user_id = ${data.userId}`;
     const current = rows[0];
     if (!current) throw new Error("Staff member not found.");
+    const touchesOwner = s(current, "role") === "owner" || data.role === "owner";
+    if (touchesOwner && actor.role !== "owner") throw new Error("Only an owner can grant or change the owner role.");
     const removingOwner =
       s(current, "role") === "owner" && b(current, "active") && (data.role !== "owner" || !data.active);
     if (removingOwner) {
@@ -5829,8 +5844,8 @@ export const getShopAccount = createServerFn({ method: "GET" })
     return { customer: mapShopCustomer(row), orders: await shopOrders(sql, n(row, "id"), s(row, "email")) };
   });
 
-async function accessFor(sql: Sql, row: Row): Promise<PortalAccess> {
-  if (isPortalOwner(s(row, "email"))) {
+export async function accessFor(sql: Sql, row: Row): Promise<PortalAccess> {
+  if (isPortalOwner(s(row, "email")) && b(row, "email_verified")) {
     return {
       roleId: "owner",
       roleLabel: "Super Admin",
@@ -5882,6 +5897,18 @@ async function requirePortal(sql: Sql, token: string) {
   const row = await shopByToken(sql, token);
   if (!row) throw new Error("Sign in again.");
   return { row, access: await accessFor(sql, row) };
+}
+
+/**
+ * requirePortal + the Portal Studio module gate: a module that is hidden for
+ * this caller (or not entitled) is refused here, not just hidden in the menu.
+ */
+async function requirePortalModule(sql: Sql, token: string, moduleId: string) {
+  const found = await requirePortal(sql, token);
+  // Imported on demand: configuration/service imports this file.
+  const { assertModule, workspaceForShopRow } = await import("./configuration/service");
+  assertModule(await workspaceForShopRow(sql, found.row), moduleId);
+  return found;
 }
 
 export async function loadPortalCustomer(token: string) {
@@ -6044,7 +6071,7 @@ export const submitPortalTicket = createServerFn({ method: "POST" })
   })
   .handler(async ({ data }) => {
     const sql = await getSql();
-    const { row, access } = await requirePortal(sql, data.token);
+    const { row, access } = await requirePortalModule(sql, data.token, "tickets");
     if (!access.canTicket) throw new Error("This account cannot open tickets.");
     const name = s(row, "name");
     const email = s(row, "email");
@@ -6480,7 +6507,7 @@ export const listMyComplaints = createServerFn({ method: "GET" })
   .validator((token: string) => str(token, 80))
   .handler(async ({ data }) => {
     const sql = await getSql();
-    const { row } = await requirePortal(sql, data);
+    const { row } = await requirePortalModule(sql, data, "complaints");
     const rows = await sql<Row>`
       select * from complaints where shop_customer_id = ${n(row, "id")} order by id desc limit 30
     `;
@@ -6565,7 +6592,7 @@ export const respondToQuote = createServerFn({ method: "POST" })
   })
   .handler(async ({ data }) => {
     const sql = await getSql();
-    const { row } = await requirePortal(sql, data.token);
+    const { row } = await requirePortalModule(sql, data.token, "quotes");
     const rows = await sql<Row>`
       select * from service_requests where id = ${data.id} and shop_customer_id = ${n(row, "id")}
     `;
@@ -6589,7 +6616,7 @@ export const submitComplaint = createServerFn({ method: "POST" })
   })
   .handler(async ({ data }) => {
     const sql = await getSql();
-    const { row } = await requirePortal(sql, data.token);
+    const { row } = await requirePortalModule(sql, data.token, "complaints");
     const ticket = await filePortalTicket(sql, {
       name: s(row, "name"),
       email: s(row, "email"),
@@ -6618,7 +6645,7 @@ export const replyPortalTicket = createServerFn({ method: "POST" })
   })
   .handler(async ({ data }) => {
     const sql = await getSql();
-    const { row } = await requirePortal(sql, data.token);
+    const { row } = await requirePortalModule(sql, data.token, "tickets");
     const tickets = await sql<Row>`
       select * from tickets where id = ${data.id} and lower(requester_email) = lower(${s(row, "email")})
     `;
@@ -6724,7 +6751,7 @@ export const requestPortalService = createServerFn({ method: "POST" })
   })
   .handler(async ({ data }) => {
     const sql = await getSql();
-    const { row, access } = await requirePortal(sql, data.token);
+    const { row, access } = await requirePortalModule(sql, data.token, "services");
     const items = await sql<Row>`select * from service_catalog where id = ${data.serviceId} and active = true`;
     const item = items[0];
     if (!item) throw new Error("That service is not in the catalog.");
@@ -6777,7 +6804,7 @@ export const orderCatalogService = createServerFn({ method: "POST" })
   })
   .handler(async ({ data }) => {
     const sql = await getSql();
-    const { row } = await requirePortal(sql, data.token);
+    const { row } = await requirePortalModule(sql, data.token, "order");
     const organizationId = nid(row, "organization_id") ?? (await ensureDeskOrganization(sql));
     const body = [data.name, data.site, data.notes].filter(Boolean).join("\n");
     const ticket = await filePortalTicket(sql, {
@@ -6817,7 +6844,7 @@ export const orderPortalOffering = createServerFn({ method: "POST" })
   })
   .handler(async ({ data }) => {
     const sql = await getSql();
-    const { row } = await requirePortal(sql, data.token);
+    const { row } = await requirePortalModule(sql, data.token, "order");
     const item = ORDER_OFFERINGS[data.offering];
     if (data.offering === "voip-ext" && !data.confirmMonthly) {
       throw new Error("Confirm the $18 monthly extension before this can be sent to Telxent.");
@@ -6863,7 +6890,7 @@ export const listPortalServices = createServerFn({ method: "GET" })
   .validator((token: string) => str(token, 80))
   .handler(async ({ data }): Promise<ServiceRequest[]> => {
     const sql = await getSql();
-    const { row } = await requirePortal(sql, data);
+    const { row } = await requirePortalModule(sql, data, "services");
     const rows = await sql<Row>`
       select * from service_requests
       where shop_customer_id = ${n(row, "id")}
@@ -7041,12 +7068,14 @@ export const setDeskRole = createServerFn({ method: "POST" })
     if (!user) throw new Error("That person has not registered yet.");
     const current = await sql<Row>`select role, active from portal_staff where user_id = ${data.userId}`;
     const wasOwner = Boolean(current[0] && s(current[0], "role") === "owner" && b(current[0], "active"));
+    if ((wasOwner || data.role === "owner") && actor.role !== "owner") throw new Error("Only an owner can grant or change the owner role.");
     if (wasOwner && data.role !== "owner") {
       const owners = await sql<Row>`select count(*)::int as n from portal_staff where role = 'owner' and active = true`;
       if ((owners[0] ? n(owners[0], "n") : 0) <= 1) throw new Error("The last owner has to stay on the desk.");
     }
     if (data.role === "customer") {
-      await sql`delete from portal_staff where user_id = ${data.userId}`;
+      // Keep the row, inactive: deleting it would let Zendesk auto-provisioning restore desk access on next sign-in.
+      await sql`update portal_staff set active = false where user_id = ${data.userId}`;
       await audit(sql, actor, "Made customer", s(user, "email"), "Desk access removed.");
       return { ok: true };
     }

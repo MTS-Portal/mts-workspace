@@ -34,10 +34,20 @@ export const Route = createRootRoute({
   component: RootComponent,
 });
 
+/** Reads a "1" flag from sessionStorage; false on the server or when storage is blocked. */
+function sessionFlag(key: string) {
+  if (typeof window === "undefined") return false;
+  try {
+    return sessionStorage.getItem(key) === "1";
+  } catch {
+    return false;
+  }
+}
+
 function EntryGate() {
   const path = useRouterState({ select: (state) => state.location.pathname });
-  const fromAdmin = typeof window !== "undefined" && sessionStorage.getItem("mts-production-admin") === "1";
-  const fromProduction = typeof window !== "undefined" && sessionStorage.getItem("mts-production-portal") === "1";
+  const fromAdmin = sessionFlag("mts-production-admin");
+  const fromProduction = sessionFlag("mts-production-portal");
   const rewritten = (fromAdmin ? rewriteAdminPath(path) : null) || (fromProduction ? rewriteProductionPath(path) : null);
   if (rewritten && rewritten !== path) return <Navigate to={rewritten} replace />;
   const entry = publicRedirect(path);

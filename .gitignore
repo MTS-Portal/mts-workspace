@@ -3,7 +3,7 @@ node_modules/
 .github_repo
 .env
 .env.*
-!.env.example
+
 
 # Build output and local caches
 .vercel/
@@ -21,3 +21,6 @@ attachments/
 screenshots/
 
 .DS_Store
+
+# Package-manager lock marker (not the lockfile)
+.node_modules.lock

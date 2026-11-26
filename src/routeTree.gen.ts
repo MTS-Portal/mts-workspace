@@ -25,6 +25,7 @@ import { Route as AppFormsRouteImport } from './routes/_app/forms'
 import { Route as AppIntegrationsRouteImport } from './routes/_app/integrations'
 import { Route as AppOperationsRouteImport } from './routes/_app/operations'
 import { Route as AppPaymentsRouteImport } from './routes/_app/payments'
+import { Route as AppPortalBuilderRouteImport } from './routes/_app/portal-builder'
 import { Route as AppProductsRouteImport } from './routes/_app/products'
 import { Route as AppRolesRouteImport } from './routes/_app/roles'
 import { Route as AppServicesRouteImport } from './routes/_app/services'
@@ -86,6 +87,7 @@ import { Route as ProductionAdminPortalFormsRouteImport } from './routes/product
 import { Route as ProductionAdminPortalIntegrationsRouteImport } from './routes/production/admin-portal/integrations'
 import { Route as ProductionAdminPortalOperationsRouteImport } from './routes/production/admin-portal/operations'
 import { Route as ProductionAdminPortalPaymentsRouteImport } from './routes/production/admin-portal/payments'
+import { Route as ProductionAdminPortalPortalBuilderRouteImport } from './routes/production/admin-portal/portal-builder'
 import { Route as ProductionAdminPortalProductsRouteImport } from './routes/production/admin-portal/products'
 import { Route as ProductionAdminPortalRolesRouteImport } from './routes/production/admin-portal/roles'
 import { Route as ProductionAdminPortalServicesRouteImport } from './routes/production/admin-portal/services'
@@ -206,6 +208,11 @@ const AppOperationsRoute = AppOperationsRouteImport.update({
 const AppPaymentsRoute = AppPaymentsRouteImport.update({
   id: '/payments',
   path: '/payments',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppPortalBuilderRoute = AppPortalBuilderRouteImport.update({
+  id: '/portal-builder',
+  path: '/portal-builder',
   getParentRoute: () => AppRoute,
 } as any)
 const AppProductsRoute = AppProductsRouteImport.update({
@@ -523,6 +530,12 @@ const ProductionAdminPortalPaymentsRoute =
     path: '/payments',
     getParentRoute: () => ProductionAdminPortalRoute,
   } as any)
+const ProductionAdminPortalPortalBuilderRoute =
+  ProductionAdminPortalPortalBuilderRouteImport.update({
+    id: '/portal-builder',
+    path: '/portal-builder',
+    getParentRoute: () => ProductionAdminPortalRoute,
+  } as any)
 const ProductionAdminPortalProductsRoute =
   ProductionAdminPortalProductsRouteImport.update({
     id: '/products',
@@ -784,6 +797,7 @@ export interface FileRoutesByFullPath {
   '/integrations': typeof AppIntegrationsRoute
   '/operations': typeof AppOperationsRoute
   '/payments': typeof AppPaymentsRoute
+  '/portal-builder': typeof AppPortalBuilderRoute
   '/products': typeof AppProductsRoute
   '/roles': typeof AppRolesRoute
   '/services': typeof AppServicesRoute
@@ -837,6 +851,7 @@ export interface FileRoutesByFullPath {
   '/production/admin-portal/integrations': typeof ProductionAdminPortalIntegrationsRoute
   '/production/admin-portal/operations': typeof ProductionAdminPortalOperationsRoute
   '/production/admin-portal/payments': typeof ProductionAdminPortalPaymentsRoute
+  '/production/admin-portal/portal-builder': typeof ProductionAdminPortalPortalBuilderRoute
   '/production/admin-portal/products': typeof ProductionAdminPortalProductsRoute
   '/production/admin-portal/roles': typeof ProductionAdminPortalRolesRoute
   '/production/admin-portal/services': typeof ProductionAdminPortalServicesRoute
@@ -903,6 +918,7 @@ export interface FileRoutesByTo {
   '/integrations': typeof AppIntegrationsRoute
   '/operations': typeof AppOperationsRoute
   '/payments': typeof AppPaymentsRoute
+  '/portal-builder': typeof AppPortalBuilderRoute
   '/products': typeof AppProductsRoute
   '/roles': typeof AppRolesRoute
   '/services': typeof AppServicesRoute
@@ -954,6 +970,7 @@ export interface FileRoutesByTo {
   '/production/admin-portal/integrations': typeof ProductionAdminPortalIntegrationsRoute
   '/production/admin-portal/operations': typeof ProductionAdminPortalOperationsRoute
   '/production/admin-portal/payments': typeof ProductionAdminPortalPaymentsRoute
+  '/production/admin-portal/portal-builder': typeof ProductionAdminPortalPortalBuilderRoute
   '/production/admin-portal/products': typeof ProductionAdminPortalProductsRoute
   '/production/admin-portal/roles': typeof ProductionAdminPortalRolesRoute
   '/production/admin-portal/services': typeof ProductionAdminPortalServicesRoute
@@ -1023,6 +1040,7 @@ export interface FileRoutesById {
   '/_app/integrations': typeof AppIntegrationsRoute
   '/_app/operations': typeof AppOperationsRoute
   '/_app/payments': typeof AppPaymentsRoute
+  '/_app/portal-builder': typeof AppPortalBuilderRoute
   '/_app/products': typeof AppProductsRoute
   '/_app/roles': typeof AppRolesRoute
   '/_app/services': typeof AppServicesRoute
@@ -1076,6 +1094,7 @@ export interface FileRoutesById {
   '/production/admin-portal/integrations': typeof ProductionAdminPortalIntegrationsRoute
   '/production/admin-portal/operations': typeof ProductionAdminPortalOperationsRoute
   '/production/admin-portal/payments': typeof ProductionAdminPortalPaymentsRoute
+  '/production/admin-portal/portal-builder': typeof ProductionAdminPortalPortalBuilderRoute
   '/production/admin-portal/products': typeof ProductionAdminPortalProductsRoute
   '/production/admin-portal/roles': typeof ProductionAdminPortalRolesRoute
   '/production/admin-portal/services': typeof ProductionAdminPortalServicesRoute
@@ -1145,6 +1164,7 @@ export interface FileRouteTypes {
     | '/integrations'
     | '/operations'
     | '/payments'
+    | '/portal-builder'
     | '/products'
     | '/roles'
     | '/services'
@@ -1198,6 +1218,7 @@ export interface FileRouteTypes {
     | '/production/admin-portal/integrations'
     | '/production/admin-portal/operations'
     | '/production/admin-portal/payments'
+    | '/production/admin-portal/portal-builder'
     | '/production/admin-portal/products'
     | '/production/admin-portal/roles'
     | '/production/admin-portal/services'
@@ -1264,6 +1285,7 @@ export interface FileRouteTypes {
     | '/integrations'
     | '/operations'
     | '/payments'
+    | '/portal-builder'
     | '/products'
     | '/roles'
     | '/services'
@@ -1315,6 +1337,7 @@ export interface FileRouteTypes {
     | '/production/admin-portal/integrations'
     | '/production/admin-portal/operations'
     | '/production/admin-portal/payments'
+    | '/production/admin-portal/portal-builder'
     | '/production/admin-portal/products'
     | '/production/admin-portal/roles'
     | '/production/admin-portal/services'
@@ -1383,6 +1406,7 @@ export interface FileRouteTypes {
     | '/_app/integrations'
     | '/_app/operations'
     | '/_app/payments'
+    | '/_app/portal-builder'
     | '/_app/products'
     | '/_app/roles'
     | '/_app/services'
@@ -1436,6 +1460,7 @@ export interface FileRouteTypes {
     | '/production/admin-portal/integrations'
     | '/production/admin-portal/operations'
     | '/production/admin-portal/payments'
+    | '/production/admin-portal/portal-builder'
     | '/production/admin-portal/products'
     | '/production/admin-portal/roles'
     | '/production/admin-portal/services'
@@ -1637,6 +1662,13 @@ declare module '@tanstack/react-router' {
       path: '/payments'
       fullPath: '/payments'
       preLoaderRoute: typeof AppPaymentsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/portal-builder': {
+      id: '/_app/portal-builder'
+      path: '/portal-builder'
+      fullPath: '/portal-builder'
+      preLoaderRoute: typeof AppPortalBuilderRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/products': {
@@ -2066,6 +2098,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProductionAdminPortalPaymentsRouteImport
       parentRoute: typeof ProductionAdminPortalRoute
     }
+    '/production/admin-portal/portal-builder': {
+      id: '/production/admin-portal/portal-builder'
+      path: '/portal-builder'
+      fullPath: '/production/admin-portal/portal-builder'
+      preLoaderRoute: typeof ProductionAdminPortalPortalBuilderRouteImport
+      parentRoute: typeof ProductionAdminPortalRoute
+    }
     '/production/admin-portal/products': {
       id: '/production/admin-portal/products'
       path: '/products'
@@ -2373,6 +2412,7 @@ interface AppRouteChildren {
   AppIntegrationsRoute: typeof AppIntegrationsRoute
   AppOperationsRoute: typeof AppOperationsRoute
   AppPaymentsRoute: typeof AppPaymentsRoute
+  AppPortalBuilderRoute: typeof AppPortalBuilderRoute
   AppProductsRoute: typeof AppProductsRoute
   AppRolesRoute: typeof AppRolesRoute
   AppServicesRoute: typeof AppServicesRoute
@@ -2398,6 +2438,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppIntegrationsRoute: AppIntegrationsRoute,
   AppOperationsRoute: AppOperationsRoute,
   AppPaymentsRoute: AppPaymentsRoute,
+  AppPortalBuilderRoute: AppPortalBuilderRoute,
   AppProductsRoute: AppProductsRoute,
   AppRolesRoute: AppRolesRoute,
   AppServicesRoute: AppServicesRoute,
@@ -2475,6 +2516,7 @@ interface ProductionAdminPortalRouteChildren {
   ProductionAdminPortalIntegrationsRoute: typeof ProductionAdminPortalIntegrationsRoute
   ProductionAdminPortalOperationsRoute: typeof ProductionAdminPortalOperationsRoute
   ProductionAdminPortalPaymentsRoute: typeof ProductionAdminPortalPaymentsRoute
+  ProductionAdminPortalPortalBuilderRoute: typeof ProductionAdminPortalPortalBuilderRoute
   ProductionAdminPortalProductsRoute: typeof ProductionAdminPortalProductsRoute
   ProductionAdminPortalRolesRoute: typeof ProductionAdminPortalRolesRoute
   ProductionAdminPortalServicesRoute: typeof ProductionAdminPortalServicesRoute
@@ -2501,6 +2543,8 @@ const ProductionAdminPortalRouteChildren: ProductionAdminPortalRouteChildren = {
     ProductionAdminPortalIntegrationsRoute,
   ProductionAdminPortalOperationsRoute: ProductionAdminPortalOperationsRoute,
   ProductionAdminPortalPaymentsRoute: ProductionAdminPortalPaymentsRoute,
+  ProductionAdminPortalPortalBuilderRoute:
+    ProductionAdminPortalPortalBuilderRoute,
   ProductionAdminPortalProductsRoute: ProductionAdminPortalProductsRoute,
   ProductionAdminPortalRolesRoute: ProductionAdminPortalRolesRoute,
   ProductionAdminPortalServicesRoute: ProductionAdminPortalServicesRoute,

@@ -457,14 +457,20 @@ export async function resendStoredEmail(sql: Sql, emailId: number) {
 
 export async function verifyAlternativeSignature(request: Request, raw: string) {
   const secret = (process.env.ALTERNATIVE_WEBHOOK_SECRET || "").trim();
-  const live = (process.env.ALTERNATIVE_ENV || "").toLowerCase() === "live";
+  // Same aliases as alternativeMode()/envAlternative(): "live" or "production",
+  // via ALTERNATIVE_ENV or ALTERNATIVE_ENVIRONMENT.
+  const mode = (process.env.ALTERNATIVE_ENV || process.env.ALTERNATIVE_ENVIRONMENT || "").trim().toLowerCase();
+  const live = mode === "live" || mode === "production";
+  // Any deployed Vercel build (production or preview) must verify: an unsigned
+  // webhook here can mark an order paid.
+  const deployed = Boolean(process.env.VERCEL_ENV) || process.env.NODE_ENV === "production";
   const header =
     request.headers.get("x-alternative-signature") ||
     request.headers.get("x-signature") ||
     request.headers.get("x-webhook-signature") ||
     "";
   if (!secret) {
-    if (live) throw new Error("ALTERNATIVE_WEBHOOK_SECRET is required for live webhooks.");
+    if (live || deployed) throw new Error("ALTERNATIVE_WEBHOOK_SECRET is required to accept payment webhooks.");
     return;
   }
   const { createHmac, timingSafeEqual } = await import("node:crypto");
