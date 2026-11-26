@@ -15,9 +15,6 @@ import { moduleIcon } from "@/lib/portal/modules/icons";
 import { canAccessModule, canAccessPath, isModuleActive } from "@/lib/portal/permissions/resolve";
 import { PortalAtmosphere } from "@/components/portal-atmosphere";
 
-/** Modules that live in the header (bell) rather than as a desktop tab. */
-const HEADER_MODULES = new Set(["notifications"]);
-
 function portalHref(path: string, to: string) {
   const base = path.startsWith("/production/user-portal") ? "/production/user-portal" : "/portal";
   if (to === "/portal") return base;
@@ -54,7 +51,9 @@ export function PortalShell({ children }: { children: ReactNode }) {
   const name = user?.displayName || session.data?.customer.name || "there";
   const count = cart.reduce((sum, line) => sum + line.quantity, 0);
   const canOrder = canAccessModule(workspace, "order");
-  const desktopTabs = modules.filter((item) => !HEADER_MODULES.has(item.id));
+  // Menu lists only modules marked "in menu"; the rest stay reachable by link (and the bell for notifications).
+  const desktopTabs = modules.filter((item) => item.nav && item.id !== "notifications");
+  const menuItems = modules.filter((item) => item.nav);
   const mobileTabs = modules.filter((item) => item.mobile).slice(0, 5);
   const allowed = ready && canAccessPath(workspace, path);
 
@@ -137,7 +136,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
               </div>
               <button type="button" aria-label="Close menu" onClick={() => setMenu(false)} className="grid size-10 shrink-0 place-items-center"><X className="size-5" /></button>
             </div>
-            {modules.map((item) => {
+            {menuItems.map((item) => {
               const active = isModuleActive(item, path);
               return (
                 <Link

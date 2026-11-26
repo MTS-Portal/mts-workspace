@@ -8,6 +8,7 @@ import { getPortalStudio, publishPortalDraft, resetPortalDraft, restorePortalVer
 import { diffPortalConfig, MAX_LABEL, MAX_MOBILE_TABS, MAX_WELCOME, normalizePortalConfig, type PortalConfig, type RoleConfig } from "@/lib/portal/configuration/schema";
 import { MODULE_ICONS, PORTAL_ROLES, ROLE_LABELS, WIDGET_SIZES, moduleById, widgetById, type Entitlement, type Entitlements, type PortalRole } from "@/lib/portal/modules/registry";
 import { moduleIcon } from "@/lib/portal/modules/icons";
+import { AI_FAMILIES, AI_FAMILY_LABELS, AI_TOOLS, type AiFamily } from "@/lib/portal/ai/registry";
 import { resolveWorkspace } from "@/lib/portal/permissions/resolve";
 import { ago } from "@/lib/portal/format";
 
@@ -15,7 +16,7 @@ export const Route = createFileRoute("/_app/portal-builder")({
   component: PortalStudioPage,
 });
 
-const SECTIONS = ["Overview", "Navigation", "Dashboard", "Preview", "History"] as const;
+const SECTIONS = ["Overview", "Navigation", "Dashboard", "AI", "Preview", "History"] as const;
 type Section = (typeof SECTIONS)[number];
 
 const ENTITLEMENT_LABELS: Record<Entitlement, string> = {
@@ -158,6 +159,13 @@ export function PortalStudioPage() {
         </div>
       ) : null}
 
+      {section === "AI" ? (
+        <div className="grid gap-4">
+          <RolePicker role={role} onChange={setRole} />
+          <AiEditor role={role} config={config} value={roleConfig} onChange={updateRole} />
+        </div>
+      ) : null}
+
       {section === "Preview" ? <Preview config={config} role={role} onRole={setRole} /> : null}
 
       {section === "History" ? (
@@ -220,7 +228,7 @@ function Overview({ state, config, pending }: { state: StudioState; config: Port
               <p className="text-sm font-semibold">{ROLE_LABELS[role]}</p>
               <p className="text-2xl font-semibold tabular-nums">{live.modules.length}</p>
               <p className="text-xs text-muted">
-                modules live · {live.widgets.length} widgets
+                modules live · {live.widgets.length} widgets · {live.ai.tools.length} AI tools
                 {draft.modules.length !== live.modules.length || draft.widgets.length !== live.widgets.length ? ` · draft ${draft.modules.length}/${draft.widgets.length}` : ""}
               </p>
             </Panel>
@@ -275,16 +283,17 @@ function NavigationEditor({ role, value, onChange }: { role: PortalRole; value: 
             </Select>
           </Field>
           <div className="text-sm text-muted sm:self-end">
-            Mobile bar: {mobileCount} of {MAX_MOBILE_TABS}. Everything else stays in the mobile menu.
+            Mobile bar: {mobileCount} of {MAX_MOBILE_TABS}. "On" makes a section reachable; "In menu" also lists it. Sections that are on but not in the menu open from links, notifications, and the assistant.
           </div>
         </div>
       </Panel>
       <Panel className="gap-0 p-0">
-        <div className="hidden grid-cols-[2.5rem_minmax(0,1fr)_10rem_6rem_6rem_5.5rem] gap-3 border-b border-line px-3 py-2 text-[11px] font-semibold tracking-wide text-subtle uppercase md:grid">
+        <div className="hidden grid-cols-[2.5rem_minmax(0,1fr)_10rem_5.5rem_5.5rem_5.5rem_5.5rem] gap-3 border-b border-line px-3 py-2 text-[11px] font-semibold tracking-wide text-subtle uppercase md:grid">
           <span />
           <span>Label</span>
           <span>Icon</span>
-          <span>Shown</span>
+          <span title="Reachable: pages, widgets, and AI tools">On</span>
+          <span>In menu</span>
           <span>Mobile bar</span>
           <span>Order</span>
         </div>
@@ -305,7 +314,7 @@ function NavigationEditor({ role, value, onChange }: { role: PortalRole; value: 
                   if (dragIndex.current != null) onChange({ modules: move(value.modules, dragIndex.current, index) });
                   dragIndex.current = null;
                 }}
-                className="grid grid-cols-[2.5rem_minmax(0,1fr)] gap-x-3 gap-y-2 border-b border-line px-3 py-3 last:border-b-0 md:grid-cols-[2.5rem_minmax(0,1fr)_10rem_6rem_6rem_5.5rem] md:items-center"
+                className="grid grid-cols-[2.5rem_minmax(0,1fr)] gap-x-3 gap-y-2 border-b border-line px-3 py-3 last:border-b-0 md:grid-cols-[2.5rem_minmax(0,1fr)_10rem_5.5rem_5.5rem_5.5rem_5.5rem] md:items-center"
               >
                 <span className="grid size-10 cursor-grab place-items-center text-subtle" aria-hidden>
                   <GripVertical className="size-4" />
@@ -334,10 +343,14 @@ function NavigationEditor({ role, value, onChange }: { role: PortalRole; value: 
                     </>
                   ) : (
                     <>
-                      <input type="checkbox" className="size-5" checked={item.enabled} onChange={(event) => set(index, { enabled: event.target.checked, mobile: event.target.checked ? item.mobile : false })} />
-                      Shown
+                      <input type="checkbox" className="size-5" checked={item.enabled} onChange={(event) => set(index, { enabled: event.target.checked, nav: event.target.checked, mobile: event.target.checked ? item.mobile : false })} />
+                      On
                     </>
                   )}
+                </label>
+                <label className="col-start-2 flex min-h-11 items-center gap-2 text-sm md:col-start-auto">
+                  <input type="checkbox" className="size-5" checked={item.nav} disabled={!item.enabled || def.required} onChange={(event) => set(index, { nav: event.target.checked })} />
+                  Menu
                 </label>
                 <label className="col-start-2 flex min-h-11 items-center gap-2 text-sm md:col-start-auto">
                   <input
@@ -356,6 +369,80 @@ function NavigationEditor({ role, value, onChange }: { role: PortalRole; value: 
                   <Button variant="secondary" size="sm" className="size-11 p-0 md:size-9" aria-label={`Move ${item.label} down`} disabled={index === value.modules.length - 1} onClick={() => onChange({ modules: move(value.modules, index, index + 1) })}>
                     <ArrowDown className="size-4" />
                   </Button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      </Panel>
+    </div>
+  );
+}
+
+/** Families whose every tool is staff-only: never available to customers, whatever is ticked. */
+const STAFF_ONLY_FAMILIES = new Set<AiFamily>(
+  AI_FAMILIES.filter((family) => {
+    const tools = Object.values(AI_TOOLS).filter((tool) => tool.family === family);
+    return tools.length > 0 && tools.every((tool) => tool.staffOnly);
+  }),
+);
+
+function AiEditor({ role, config, value, onChange }: { role: PortalRole; config: PortalConfig; value: RoleConfig; onChange: (next: Partial<RoleConfig>) => void }) {
+  const ai = value.ai;
+  const set = (patch: Partial<RoleConfig["ai"]>) => onChange({ ai: { ...ai, ...patch } });
+  const live = resolveWorkspace(config, role, { ticket: true, shop: true, billing: true, services: true });
+  const surfaces = [
+    { key: "chat", label: "AI chat", hint: "Sarah and the portal assistant answer typed messages." },
+    { key: "voice", label: "Voice calls", hint: "The call button and /call page. Needs AI tools to act on the account." },
+    { key: "assistant", label: "Floating assistant", hint: "The chat button on every page. Needs AI chat." },
+  ] as const;
+  return (
+    <div className="grid gap-4">
+      <Panel>
+        <p className="text-sm font-semibold">Where the assistant appears</p>
+        <div className="grid gap-2 sm:grid-cols-3">
+          {surfaces.map((item) => (
+            <label key={item.key} className="flex min-h-11 items-start gap-3 rounded-lg border border-line px-3 py-3 text-sm">
+              <input type="checkbox" className="mt-0.5 size-5" checked={ai[item.key]} onChange={(event) => set({ [item.key]: event.target.checked })} />
+              <span>
+                <span className="block font-medium">{item.label}</span>
+                <span className="text-xs text-muted">{item.hint}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+      </Panel>
+      <Panel className="gap-0 p-0">
+        <div className="border-b border-line px-3 py-3">
+          <p className="text-sm font-semibold">What the assistant may do</p>
+          <p className="text-xs text-muted">
+            Each tool also needs its portal section to be shown for this role and allowed on the account. The server checks every call; the AI prompt is not trusted. {live.ai.tools.length} tools available to {ROLE_LABELS[role]} with full account access.
+          </p>
+        </div>
+        <ul aria-label="AI tool families">
+          {AI_FAMILIES.map((family) => {
+            const blocked = role === "customer" && STAFF_ONLY_FAMILIES.has(family);
+            const tools = Object.entries(AI_TOOLS)
+              .filter(([, tool]) => tool.family === family)
+              .map(([name]) => name);
+            return (
+              <li key={family} className="flex items-start gap-3 border-b border-line px-3 py-3 last:border-b-0">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 size-5"
+                  aria-label={AI_FAMILY_LABELS[family].label}
+                  checked={!blocked && ai.families[family]}
+                  disabled={blocked}
+                  onChange={(event) => set({ families: { ...ai.families, [family]: event.target.checked } })}
+                />
+                <div className="min-w-0 text-sm">
+                  <p className="font-medium">
+                    {AI_FAMILY_LABELS[family].label}
+                    {blocked ? <span className="ml-2 text-xs font-normal text-muted">Staff only</span> : null}
+                    {family === "destructive" || family === "purchasing" ? <span className="ml-2 text-xs font-normal text-muted">Always asks to confirm or checks the role</span> : null}
+                  </p>
+                  <p className="text-xs text-muted">{AI_FAMILY_LABELS[family].description}</p>
+                  <p className="mt-1 break-words font-mono text-[11px] text-subtle">{tools.join(", ")}</p>
                 </div>
               </li>
             );
@@ -459,7 +546,7 @@ function Preview({ config, role, onRole }: { config: PortalConfig; role: PortalR
               <span className="text-sm font-semibold">{workspace.modules.find((item) => item.id === workspace.landing)?.label ?? "Home"}</span>
             ) : (
               workspace.modules
-                .filter((item) => item.id !== "notifications")
+                .filter((item) => item.nav && item.id !== "notifications")
                 .map((item) => (
                   <span key={item.id} className={item.id === workspace.landing ? "shrink-0 rounded-lg bg-ink px-2.5 py-1.5 text-xs text-white" : "shrink-0 rounded-lg px-2.5 py-1.5 text-xs text-ink"}>
                     {item.label}

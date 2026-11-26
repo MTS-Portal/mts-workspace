@@ -14,7 +14,7 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql, type Sql } from "@/lib/db";
 import { accessFor, assertAdmin, audit, loadActor, resolveDeskRole } from "@/lib/portal/api";
 import { ALL_ENTITLEMENTS, type Entitlements, type PortalRole } from "../modules/registry.ts";
-import { entitlementsFromAccess, resolveWorkspace, type Workspace } from "../permissions/resolve.ts";
+import { canAccessModule, canUseAiTool, entitlementsFromAccess, resolveWorkspace, type Workspace } from "../permissions/resolve.ts";
 import { cleanText, defaultPortalConfig, diffPortalConfig, normalizePortalConfig, type ConfigChange, type PortalConfig } from "./schema.ts";
 
 const CONFIG_ID = "user-portal";
@@ -60,6 +60,34 @@ export async function workspaceForUser(sql: Sql, userId: string): Promise<Worksp
   const role: PortalRole = desk || "customer";
   const [config, entitlements] = await Promise.all([publishedPortalConfig(sql), visitorEntitlements(sql, userId)]);
   return resolveWorkspace(config, role, entitlements);
+}
+
+/**
+ * Workspace for a customer-portal session row (`shop_customers`), used by the
+ * token-based customer server functions and Sarah. Staff who open the portal
+ * keep their staff role; everyone else is a customer.
+ */
+export async function workspaceForShopRow(sql: Sql, row: Row): Promise<Workspace> {
+  const email = text(row, "email").toLowerCase();
+  const users = email ? await sql<Row>`select id from "user" where lower(email) = ${email} limit 1` : [];
+  const userId = text(users[0], "id");
+  const desk = userId ? await resolveDeskRole(sql, userId) : "";
+  const role: PortalRole = desk || "customer";
+  const [config, access] = await Promise.all([publishedPortalConfig(sql), accessFor(sql, row)]);
+  return resolveWorkspace(config, role, entitlementsFromAccess(access));
+}
+
+/** Server-side module gate: hidden in Portal Studio (or not entitled) means the call is refused, not just the tab. */
+export function assertModule(workspace: Workspace, moduleId: string) {
+  if (!canAccessModule(workspace, moduleId)) throw new Error("That isn't part of your portal. Ask MTS if you need access.");
+}
+
+export function assertAiTool(workspace: Workspace, tool: string) {
+  if (!canUseAiTool(workspace, tool)) throw new Error("That isn't available to the assistant on your portal.");
+}
+
+export function assertAiSurface(workspace: Workspace, surface: "chat" | "voice") {
+  if (!workspace.ai[surface]) throw new Error(surface === "voice" ? "Voice calls are turned off for your portal." : "The assistant is turned off for your portal.");
 }
 
 export const getPortalWorkspace = createServerFn({ method: "GET" })

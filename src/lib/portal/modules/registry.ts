@@ -60,8 +60,10 @@ export type ModuleDef = {
   category: ModuleCategory;
   /** Entitlement the account must hold; absent = available to every signed-in user. */
   entitlement?: Entitlement;
-  /** Roles that get this module enabled in the default configuration. */
+  /** Roles that get this module enabled (reachable) in the default configuration. */
   defaultRoles: readonly PortalRole[];
+  /** Roles that also get it in the menu by default; absent = every enabled role. Others reach it by link only. */
+  defaultMenu?: readonly PortalRole[];
   /** Cannot be disabled (lock-out protection). */
   required?: boolean;
   guide: string;
@@ -79,11 +81,10 @@ export const MODULES: readonly ModuleDef[] = [
   { id: "orders", label: "Orders", route: "/portal/orders", routes: ["/portal/orders"], icon: "package", category: "Commerce", entitlement: "shop", defaultRoles: STAFF, guide: "orders" },
   { id: "complaints", label: "Complaints", route: "/portal/complaints", routes: ["/portal/complaints"], icon: "message-square-warning", category: "Support", defaultRoles: STAFF, guide: "complaints" },
   { id: "organization", label: "Organization", route: "/portal/organization", routes: ["/portal/organization"], icon: "building", category: "Account", defaultRoles: STAFF, guide: "organization" },
-  { id: "services", label: "My services", route: "/portal/my-services", routes: ["/portal/my-services", "/portal/services"], icon: "wrench", category: "Commerce", entitlement: "services", defaultRoles: [], guide: "services" },
-  { id: "quotes", label: "Quotes", route: "/portal/quotes", routes: ["/portal/quotes"], icon: "file-text", category: "Commerce", entitlement: "services", defaultRoles: [], guide: "quotes" },
-  { id: "notifications", label: "Notifications", route: "/portal/notifications", routes: ["/portal/notifications"], icon: "bell", category: "Support", defaultRoles: EVERYONE, guide: "notifications" },
-  { id: "campaigns", label: "Campaigns", route: "/portal/campaigns", routes: ["/portal/campaigns"], icon: "megaphone", category: "Account", defaultRoles: [], guide: "campaigns" },
-  { id: "call", label: "Call", route: "/portal/call", routes: ["/portal/call"], icon: "phone", category: "Support", defaultRoles: [], guide: "call" },
+  { id: "services", label: "My services", route: "/portal/my-services", routes: ["/portal/my-services", "/portal/services"], icon: "wrench", category: "Commerce", entitlement: "services", defaultRoles: EVERYONE, defaultMenu: [], guide: "services" },
+  { id: "quotes", label: "Quotes", route: "/portal/quotes", routes: ["/portal/quotes"], icon: "file-text", category: "Commerce", entitlement: "services", defaultRoles: EVERYONE, defaultMenu: [], guide: "quotes" },
+  { id: "notifications", label: "Notifications", route: "/portal/notifications", routes: ["/portal/notifications"], icon: "bell", category: "Support", defaultRoles: EVERYONE, defaultMenu: ["customer"], guide: "notifications" },
+  { id: "campaigns", label: "Campaigns", route: "/portal/campaigns", routes: ["/portal/campaigns"], icon: "megaphone", category: "Account", defaultRoles: EVERYONE, defaultMenu: [], guide: "campaigns" },
 ] as const;
 
 export const MODULE_IDS = MODULES.map((item) => item.id);

@@ -2,25 +2,42 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { ALL_ENTITLEMENTS, MODULES, type Entitlements } from "../modules/registry.ts";
 import { defaultPortalConfig, diffPortalConfig, normalizePortalConfig, MAX_MOBILE_TABS } from "../configuration/schema.ts";
-import { canAccessPath, canonicalPortalPath, moduleForPath, resolveWorkspace } from "./resolve.ts";
+import { canAccessPath, canonicalPortalPath, canUseAiTool, EMPTY_WORKSPACE, moduleForPath, resolveWorkspace } from "./resolve.ts";
+import { AI_FAMILIES, AI_TOOLS } from "../ai/registry.ts";
 
 const NONE: Entitlements = { ticket: false, shop: false, billing: false, services: false };
 const TICKETS_ONLY: Entitlements = { ...NONE, ticket: true };
 
-test("default customer workspace is support-only (home, tickets, account, notifications)", () => {
+test("default customer menu is support-only (home, tickets, account, notifications)", () => {
   const workspace = resolveWorkspace(defaultPortalConfig(), "customer", ALL_ENTITLEMENTS);
   assert.deepEqual(
-    workspace.modules.map((item) => item.id),
+    workspace.modules.filter((item) => item.nav).map((item) => item.id),
     ["home", "tickets", "account", "notifications"],
   );
+  // Reachable by link (notifications, campaign buttons) but not in the menu:
+  assert.deepEqual(
+    workspace.modules.filter((item) => !item.nav).map((item) => item.id),
+    ["services", "quotes", "campaigns"],
+  );
+});
+
+test("link-only modules still need their entitlement", () => {
+  const workspace = resolveWorkspace(defaultPortalConfig(), "customer", TICKETS_ONLY);
+  assert.equal(canAccessPath(workspace, "/production/user-portal/quotes"), false);
+  assert.equal(canAccessPath(workspace, "/production/user-portal/campaigns"), true);
+});
+
+test("a module can be in the menu only while it is turned on", () => {
+  const config = normalizePortalConfig({ roles: { customer: { modules: [{ id: "complaints", enabled: false, nav: true }] } } });
+  assert.equal(config.roles.customer.modules.find((item) => item.id === "complaints")?.nav, false);
 });
 
 test("default staff workspace keeps the previous desk tabs", () => {
   for (const role of ["viewer", "agent", "admin", "owner"] as const) {
     const workspace = resolveWorkspace(defaultPortalConfig(), role, ALL_ENTITLEMENTS);
     assert.deepEqual(
-      workspace.modules.map((item) => item.id),
-      ["home", "tickets", "order", "billing", "account", "orders", "complaints", "organization", "notifications"],
+      workspace.modules.filter((item) => item.nav).map((item) => item.id),
+      ["home", "tickets", "order", "billing", "account", "orders", "complaints", "organization"],
       role,
     );
   }
@@ -117,4 +134,74 @@ test("diff describes what changed", () => {
   const text = diffPortalConfig(before, after).map((item) => item.text);
   assert.ok(text.includes('"Tickets" renamed to "Support"'));
   assert.ok(text.includes('Widget "Equipment catalog" added'));
+});
+
+test("AI: customers never get staff-only tools, even with every family switched on", () => {
+  const config = defaultPortalConfig();
+  for (const key of Object.keys(config.roles.customer.ai.families)) config.roles.customer.ai.families[key as keyof typeof config.roles.customer.ai.families] = true;
+  for (const item of config.roles.customer.modules) item.enabled = true;
+  const workspace = resolveWorkspace(config, "customer", ALL_ENTITLEMENTS);
+  for (const name of ["delete_ticket", "delete_order", "update_order", "search_people", "my_tasks", "desk_counts"]) {
+    assert.equal(canUseAiTool(workspace, name), false, name);
+  }
+  assert.equal(canUseAiTool(workspace, "list_tickets"), true);
+});
+
+test("AI: a tool follows its module — hiding Order removes purchasing tools", () => {
+  const config = defaultPortalConfig();
+  const owner = resolveWorkspace(config, "owner", ALL_ENTITLEMENTS);
+  assert.equal(canUseAiTool(owner, "order_product"), true);
+  config.roles.owner.modules.find((item) => item.id === "order")!.enabled = false;
+  const hidden = resolveWorkspace(config, "owner", ALL_ENTITLEMENTS);
+  assert.equal(canUseAiTool(hidden, "order_product"), false);
+  assert.equal(canUseAiTool(hidden, "search_catalog"), false);
+  assert.equal(canUseAiTool(hidden, "my_tickets"), true);
+});
+
+test("AI: a tool follows account entitlements, not just config", () => {
+  const config = defaultPortalConfig();
+  for (const item of config.roles.customer.modules) item.enabled = true;
+  const workspace = resolveWorkspace(config, "customer", TICKETS_ONLY);
+  assert.equal(canUseAiTool(workspace, "place_order"), false);
+  assert.equal(canUseAiTool(workspace, "list_billing"), false);
+  assert.equal(canUseAiTool(workspace, "open_ticket"), true);
+});
+
+test("AI: switching a family off removes its tools; chat and voice off removes all tools", () => {
+  const config = defaultPortalConfig();
+  config.roles.agent.ai.families.web = false;
+  const agent = resolveWorkspace(config, "agent", ALL_ENTITLEMENTS);
+  assert.equal(canUseAiTool(agent, "search_web"), false);
+  assert.equal(canUseAiTool(agent, "my_tickets"), true);
+  config.roles.agent.ai.chat = false;
+  config.roles.agent.ai.voice = false;
+  const silent = resolveWorkspace(config, "agent", ALL_ENTITLEMENTS);
+  assert.deepEqual(silent.ai.tools, []);
+  assert.equal(silent.ai.assistant, false);
+});
+
+test("AI: default customer families exclude web, directory, tasks, desk, destructive", () => {
+  const families = defaultPortalConfig().roles.customer.ai.families;
+  for (const key of ["web", "directory", "tasks", "desk", "destructive"] as const) assert.equal(families[key], false, key);
+  assert.equal(defaultPortalConfig().roles.owner.ai.families.destructive, true);
+});
+
+test("AI: unknown tools are denied; the empty workspace denies everything", () => {
+  const owner = resolveWorkspace(defaultPortalConfig(), "owner", ALL_ENTITLEMENTS);
+  assert.equal(canUseAiTool(owner, "rm_rf"), false);
+  assert.equal(canUseAiTool(EMPTY_WORKSPACE, "my_tickets"), false);
+});
+
+test("AI: every tool in the registry maps to a known family and module", () => {
+  for (const [name, def] of Object.entries(AI_TOOLS)) {
+    assert.ok(AI_FAMILIES.includes(def.family), name);
+    if (def.module) assert.ok(MODULES.some((item) => item.id === def.module), `${name} -> ${def.module}`);
+  }
+});
+
+test("the call page follows the AI voice setting", () => {
+  const config = defaultPortalConfig();
+  assert.equal(canAccessPath(resolveWorkspace(config, "customer", ALL_ENTITLEMENTS), "/production/user-portal/call"), true);
+  config.roles.customer.ai.voice = false;
+  assert.equal(canAccessPath(resolveWorkspace(config, "customer", ALL_ENTITLEMENTS), "/production/user-portal/call"), false);
 });

@@ -4,6 +4,8 @@ import { setInventory } from "@/lib/portal/commerce";
 import { ensureDeskOrganization, filePortalTicket, loadPortalCustomer, settleNewOrder, syncCustomerTicket } from "@/lib/portal/api";
 import { unpaidCardStatus } from "@/lib/portal/security";
 import { lookupKnowledge, pageById } from "@/lib/portal/knowledge";
+import { assertAiSurface, workspaceForShopRow } from "@/lib/portal/configuration/service";
+import { canAccessPath, canUseAiTool } from "@/lib/portal/permissions/resolve";
 import { procedureTurn } from "@/lib/portal/sarah-procedures";
 import { affirms, declines, planUtterance, spokenFallback, type Offering, type Planned } from "@/lib/portal/sarah-plan";
 import { allowTransition, confirmationFresh, confirmSnapshot, followUp, listPick, phoneChoice, quoteFor, receiptAmount, reconcileDecision, type SarahQuote, type SarahReceipt, type SarahSlots } from "@/lib/portal/sarah-state";
@@ -43,8 +45,16 @@ async function runTool(token: string, planned: Planned, approved = false): Promi
   if (planned.tool === "ask" || planned.tool === "confirm" || planned.tool === "decline") {
     return { summary: "I can check tickets, orders, and services, or open something new. What should I take care of?" };
   }
+  const loaded = await loadPortalCustomer(token);
+  // Every tool is checked against Portal Studio + account entitlements, however Sarah reached it.
+  const workspace = await workspaceForShopRow(loaded.sql, loaded.row);
+  const registered = planned.tool === "show" ? "show_page" : planned.tool === "lookup" ? "lookup_kb" : planned.tool;
+  if (!canUseAiTool(workspace, registered)) {
+    return { summary: "That isn't something I can do on your portal. I can still help with your tickets." };
+  }
   if (planned.tool === "show") {
     const page = pageById(planned.page);
+    if (!canAccessPath(workspace, page.to)) return { summary: "That page isn't part of your portal. I can help you here instead." };
     return { summary: `I'm opening ${page.label} now. I'll stay on the line while you look.`, show: { to: page.to, guide: page.guide, label: page.label }, navigate: true };
   }
   if (planned.tool === "lookup") {
@@ -52,7 +62,7 @@ async function runTool(token: string, planned: Planned, approved = false): Promi
     if (!found) return { summary: "I can walk you through tickets, orders, billing, or the services we offer. What would you like to review?" };
     return { summary: found.summary, show: found.show };
   }
-  const { sql, row, access } = await loadPortalCustomer(token);
+  const { sql, row, access } = loaded;
   const name = s(row, "name");
   const email = s(row, "email");
   const id = n(row, "id");
@@ -679,6 +689,10 @@ function groundReply(reply: string, fromTool: boolean) {
 async function askGrok(token: string, channel: "chat" | "call", history: { role: "user" | "assistant"; content: string }[], profile: string) {
   const apiKey = process.env.XAI_API_KEY;
   if (!apiKey) return null;
+  const loaded = await loadPortalCustomer(token);
+  const workspace = await workspaceForShopRow(loaded.sql, loaded.row);
+  // The model only sees tools this customer may run; runTool re-checks each call.
+  const tools = TOOLS.filter((tool) => canUseAiTool(workspace, tool.function.name));
   const messages: ChatMessage[] = [
     { role: "system", content: sarahSystem(channel, profile) },
     ...history.slice(-4),
@@ -692,7 +706,7 @@ async function askGrok(token: string, channel: "chat" | "call", history: { role:
     const res = await fetch("https://api.x.ai/v1/chat/completions", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ model: "grok-4-1-fast-non-reasoning", messages, tools: TOOLS, tool_choice: "auto", max_tokens: 160, temperature: 0 }),
+      body: JSON.stringify({ model: "grok-4-1-fast-non-reasoning", messages, ...(tools.length ? { tools, tool_choice: "auto" } : {}), max_tokens: 160, temperature: 0 }),
     });
     if (!res.ok) return last ? { reply: last, cartSku: cartSku || undefined, pending, show, cards } : null;
     const body = (await res.json()) as { choices?: { message?: ChatMessage & { tool_calls?: { id: string; function?: { name?: string; arguments?: string | Record<string, unknown> }; name?: string; arguments?: string | Record<string, unknown> }[] } }[] };
@@ -802,6 +816,7 @@ export async function runSarahTurn(data: {
   history: { role: "user" | "assistant"; content: string }[];
 }) {
     const { sql, row, access } = await loadPortalCustomer(data.token);
+    assertAiSurface(await workspaceForShopRow(sql, row), data.channel === "call" ? "voice" : "chat");
     const profile = `${s(row, "name")} <${s(row, "email")}> ${s(row, "business_name")}`.trim();
     const customerId = n(row, "id");
     const notice = await reconcileCustomer(sql, customerId).catch(() => "");
@@ -956,86 +971,3 @@ export const getSarahStatus = createServerFn({ method: "POST" })
     }
   });
 
-function humanSpeech(text: string) {
-  const clean = text
-    .replace(/\[[^\]]+\]|<[^>]+>/g, " ")
-    .replace(/\b(sigh|sighs|breath|breathe|breathing|chuckle|chuckles|laughs)\b/gi, " ")
-    .replace(/^(ha+|haha|hehe|hmm+|ahh+|ohh+|mm-?hmm|uh-?huh|um+|uh+)[,.! ]+/i, "")
-    .replace(/\bI will\b/g, "I'll")
-    .replace(/\bI am\b/g, "I'm")
-    .replace(/\bdo not\b/gi, "don't")
-    .replace(/\bcannot\b/gi, "can't")
-    .replace(/\$18(?:\s*\/\s*|\s+per\s+)month/gi, "eighteen dollars per month")
-    .replace(/\$175/g, "one hundred seventy-five dollars")
-    .replace(/\s+/g, " ")
-    .trim();
-  return clean.split(/(?<=[.!?])\s+/).filter(Boolean).slice(0, 2).join(" ");
-}
-
-export const speakSarah = createServerFn({ method: "POST" })
-  .validator((input: unknown) => {
-    const text = String((input as { text?: string })?.text || "").replace(/\s+/g, " ").trim().slice(0, 700);
-    if (!text) throw new Error("Nothing to say.");
-    return { text: humanSpeech(text) };
-  })
-  .handler(async ({ data }) => {
-    const apiKey = process.env.XAI_API_KEY;
-    if (!apiKey) return { audio: "" };
-    const res = await fetch("https://api.x.ai/v1/tts", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        text: data.text,
-        voice_id: "ara",
-        language: "en",
-        speed: 1.05,
-        output_format: { codec: "mp3", sample_rate: 24000, bit_rate: 64000 },
-      }),
-    });
-    const type = res.headers.get("content-type") || "";
-    if (!res.ok || !type.includes("audio")) return { audio: "" };
-    const bytes = Buffer.from(await res.arrayBuffer());
-    if (bytes.byteLength < 100) return { audio: "" };
-    return { audio: bytes.toString("base64") };
-  });
-
-export const hearSarah = createServerFn({ method: "POST" })
-  .validator((input: unknown) => {
-    const raw = (input ?? {}) as { audio?: string; mime?: string };
-    const audio = String(raw.audio || "");
-    const mime = String(raw.mime || "audio/webm").split(";")[0] || "audio/webm";
-    if (!audio || audio.length > 1_800_000) throw new Error("I didn't catch that.");
-    return { audio, mime };
-  })
-  .handler(async ({ data }) => {
-    const apiKey = process.env.XAI_API_KEY;
-    if (!apiKey) return { text: "" };
-    const bytes = Buffer.from(data.audio, "base64");
-    const ext = data.mime.includes("mp4") ? "m4a" : data.mime.includes("ogg") ? "ogg" : data.mime.includes("wav") ? "wav" : "webm";
-    const form = new FormData();
-    form.append("model", "grok-voice-transcribe-2.0");
-    form.append("language", "en");
-    form.append("format", "true");
-    for (const term of ["Manage Tech Service", "Telxent", "VoIP", "eFax", "Zendesk"]) form.append("keyterm", term);
-    form.append("file", new File([new Uint8Array(bytes)], `turn.${ext}`, { type: data.mime }));
-    const res = await fetch("https://api.x.ai/v1/stt", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}` },
-      body: form,
-    });
-    if (!res.ok) {
-      const plain = new FormData();
-      plain.append("model", "grok-voice-transcribe-2.0");
-      plain.append("file", new File([new Uint8Array(bytes)], `turn.${ext}`, { type: data.mime }));
-      const retry = await fetch("https://api.x.ai/v1/stt", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${apiKey}` },
-        body: plain,
-      });
-      if (!retry.ok) return { text: "" };
-      const retryBody = (await retry.json()) as { text?: string; transcript?: string };
-      return { text: String(retryBody.text || retryBody.transcript || "").trim() };
-    }
-    const body = (await res.json()) as { text?: string; transcript?: string };
-    return { text: String(body.text || body.transcript || "").trim() };
-  });

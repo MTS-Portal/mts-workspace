@@ -19,28 +19,47 @@ import {
   type PortalRole,
   type WidgetSize,
 } from "../modules/registry.ts";
+import { AI_FAMILIES, AI_FAMILY_LABELS, defaultAiFamilies, type AiFamily } from "../ai/registry.ts";
 
 export const MAX_MOBILE_TABS = 5;
 export const MAX_LABEL = 32;
 export const MAX_WELCOME = 160;
 
-export type ModuleSetting = { id: string; enabled: boolean; label: string; icon: ModuleIcon; mobile: boolean };
+/** enabled = reachable (routes, widgets, AI tools); nav = also listed in the menu; mobile = in the mobile bottom bar. */
+export type ModuleSetting = { id: string; enabled: boolean; nav: boolean; label: string; icon: ModuleIcon; mobile: boolean };
 export type WidgetSetting = { id: string; enabled: boolean; size: WidgetSize };
-export type RoleConfig = { modules: ModuleSetting[]; widgets: WidgetSetting[]; landing: string };
+export type AiSettings = {
+  /** Text chat (Sarah and the portal assistant). */
+  chat: boolean;
+  /** Voice calls. */
+  voice: boolean;
+  /** Floating assistant button in the User Portal. */
+  assistant: boolean;
+  families: Record<AiFamily, boolean>;
+};
+export type RoleConfig = { modules: ModuleSetting[]; widgets: WidgetSetting[]; landing: string; ai: AiSettings };
 export type PortalConfig = { schemaVersion: 1; welcomeMessage: string; roles: Record<PortalRole, RoleConfig> };
 
 const moduleSetting = z.object({
   id: z.string().max(40),
   enabled: z.boolean().optional(),
+  nav: z.boolean().optional(),
   label: z.string().optional(),
   icon: z.string().optional(),
   mobile: z.boolean().optional(),
 });
 const widgetSetting = z.object({ id: z.string().max(40), enabled: z.boolean().optional(), size: z.string().optional() });
+const aiSettings = z.object({
+  chat: z.boolean().optional(),
+  voice: z.boolean().optional(),
+  assistant: z.boolean().optional(),
+  families: z.record(z.string(), z.boolean()).optional(),
+});
 const roleConfig = z.object({
   modules: z.array(moduleSetting).max(64).optional(),
   widgets: z.array(widgetSetting).max(64).optional(),
   landing: z.string().max(40).optional(),
+  ai: aiSettings.optional(),
 });
 
 /** Loose input schema: shape-checks untrusted input; `normalizePortalConfig` then enforces meaning. */
@@ -62,16 +81,20 @@ export function cleanText(value: unknown, max: number) {
 }
 
 function defaultRole(role: PortalRole): RoleConfig {
-  const modules = MODULES.map((item) => ({
-    id: item.id,
-    enabled: Boolean(item.required) || item.defaultRoles.includes(role),
-    label: item.label,
-    icon: item.icon,
-    mobile: false,
-  }));
+  const modules = MODULES.map((item) => {
+    const enabled = Boolean(item.required) || item.defaultRoles.includes(role);
+    return {
+      id: item.id,
+      enabled,
+      nav: enabled && (item.defaultMenu ? item.defaultMenu.includes(role) : true),
+      label: item.label,
+      icon: item.icon,
+      mobile: false,
+    };
+  });
   let slots = MAX_MOBILE_TABS;
   for (const item of modules) {
-    if (item.enabled && slots > 0) {
+    if (item.nav && slots > 0) {
       item.mobile = true;
       slots -= 1;
     }
@@ -80,6 +103,7 @@ function defaultRole(role: PortalRole): RoleConfig {
     modules,
     widgets: WIDGETS.map((item) => ({ id: item.id, enabled: item.defaultOn, size: item.defaultSize })),
     landing: "home",
+    ai: { chat: true, voice: true, assistant: true, families: defaultAiFamilies(role === "customer") },
   };
 }
 
@@ -101,9 +125,11 @@ function normalizeRole(input: z.infer<typeof roleConfig> | undefined, role: Port
     seen.add(def.id);
     const base = fallback.modules.find((item) => item.id === def.id)!;
     const icon = (MODULE_ICONS as readonly string[]).includes(raw.icon ?? "") ? (raw.icon as ModuleIcon) : base.icon;
+    const enabled = def.required ? true : (raw.enabled ?? base.enabled);
     modules.push({
       id: def.id,
-      enabled: def.required ? true : (raw.enabled ?? base.enabled),
+      enabled,
+      nav: def.required ? true : enabled && (raw.nav ?? (raw.enabled === undefined ? base.nav : enabled)),
       label: cleanText(raw.label, MAX_LABEL) || def.label,
       icon,
       mobile: raw.mobile ?? false,
@@ -131,7 +157,18 @@ function normalizeRole(input: z.infer<typeof roleConfig> | undefined, role: Port
   for (const base of fallback.widgets) if (!seenWidgets.has(base.id)) widgets.push(base);
 
   const landing = modules.find((item) => item.id === input.landing && item.enabled) ? (input.landing as string) : "home";
-  return { modules, widgets, landing };
+  const families = { ...fallback.ai.families };
+  for (const family of AI_FAMILIES) {
+    const value = input.ai?.families?.[family];
+    if (typeof value === "boolean") families[family] = value;
+  }
+  const ai: AiSettings = {
+    chat: input.ai?.chat ?? fallback.ai.chat,
+    voice: input.ai?.voice ?? fallback.ai.voice,
+    assistant: input.ai?.assistant ?? fallback.ai.assistant,
+    families,
+  };
+  return { modules, widgets, landing, ai };
 }
 
 /** Coerce any stored or submitted value into a valid config. Never throws. */
@@ -156,7 +193,8 @@ export function diffPortalConfig(before: PortalConfig, after: PortalConfig): Con
     for (const next of b.modules) {
       const prev = a.modules.find((item) => item.id === next.id);
       if (!prev) continue;
-      if (prev.enabled !== next.enabled) changes.push({ role, text: `${moduleLabel(next.id)} ${next.enabled ? "shown" : "hidden"}` });
+      if (prev.enabled !== next.enabled) changes.push({ role, text: `${moduleLabel(next.id)} ${next.enabled ? "turned on" : "turned off"}` });
+      else if (prev.nav !== next.nav) changes.push({ role, text: `${moduleLabel(next.id)} ${next.nav ? "added to" : "removed from"} the menu` });
       if (prev.label !== next.label) changes.push({ role, text: `"${prev.label}" renamed to "${next.label}"` });
       if (prev.icon !== next.icon) changes.push({ role, text: `${moduleLabel(next.id)} icon changed` });
       if (prev.mobile !== next.mobile) changes.push({ role, text: `${moduleLabel(next.id)} ${next.mobile ? "added to" : "removed from"} mobile bar` });
@@ -171,6 +209,12 @@ export function diffPortalConfig(before: PortalConfig, after: PortalConfig): Con
       if (prev.size !== next.size) changes.push({ role, text: `Widget "${label}" resized to ${next.size}` });
     }
     if (a.widgets.map((item) => item.id).join() !== b.widgets.map((item) => item.id).join()) changes.push({ role, text: "Dashboard order changed" });
+    for (const key of ["chat", "voice", "assistant"] as const) {
+      if (a.ai[key] !== b.ai[key]) changes.push({ role, text: `AI ${key === "assistant" ? "floating assistant" : key} ${b.ai[key] ? "on" : "off"}` });
+    }
+    for (const family of AI_FAMILIES) {
+      if (a.ai.families[family] !== b.ai.families[family]) changes.push({ role, text: `AI tools "${AI_FAMILY_LABELS[family].label}" ${b.ai.families[family] ? "on" : "off"}` });
+    }
   }
   return changes;
 }

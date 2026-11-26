@@ -32,6 +32,16 @@ const CALL_TOOLS = [
   },
 ];
 
+/** Only declare the tools the server says this caller may run (the server re-checks every call). */
+function callTools(allowed: string[]) {
+  const names = new Set(allowed);
+  const declared = (CALL_TOOLS[1] as { functionDeclarations: { name: string }[] }).functionDeclarations.filter((tool) => names.has(tool.name));
+  const tools: Record<string, unknown>[] = [];
+  if (names.has("search_web")) tools.push({ googleSearch: {} });
+  if (declared.length) tools.push({ functionDeclarations: declared });
+  return tools;
+}
+
 type LivePart = { inlineData?: { mimeType?: string; data?: string }; text?: string };
 type LiveMessage = {
   setupComplete?: unknown;
@@ -111,7 +121,7 @@ export function ZendeskVoiceCall() {
       return;
     }
 
-    let session: { token: string; model: string; voice: string };
+    let session: { token: string; model: string; voice: string; tools: string[] };
     try {
       session = await mintLiveToken();
     } catch {
@@ -278,7 +288,7 @@ export function ZendeskVoiceCall() {
           },
           systemInstruction: { parts: [{ text: CALL_PROMPT }] },
           contextWindowCompression: { triggerTokens: 104857, slidingWindow: { targetTokens: 52428 } },
-          tools: CALL_TOOLS,
+          tools: callTools(session.tools),
         },
       });
     };

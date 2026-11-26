@@ -3,6 +3,7 @@ import { createFileRoute, Navigate, Outlet, useNavigate, useRouterState } from "
 import { useEffect } from "react";
 import { Shell } from "@/components/shell";
 import { Boot } from "@/components/ui";
+import { usePortalWorkspace } from "@/lib/portal/use-portal-workspace";
 import { ZendeskAgentWidget } from "@/components/zendesk-agent-widget";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { getSessionHome } from "@/lib/portal/api";
@@ -17,6 +18,7 @@ function ProductionAdminLayout() {
   const path = useRouterState({ select: (state) => state.location.pathname });
   const onAgent = path.includes("/agent");
   const { user, isPending } = useCurrentUserState();
+  const { workspace } = usePortalWorkspace();
   const home = useQuery({
     queryKey: ["session-home", user?.id],
     queryFn: () => getSessionHome(),
@@ -54,7 +56,7 @@ function ProductionAdminLayout() {
   return (
     <Shell>
       <Outlet />
-      {onAgent ? null : <ZendeskAgentWidget />}
+      {onAgent || !workspace.ai.assistant ? null : <ZendeskAgentWidget />}
     </Shell>
   );
 }

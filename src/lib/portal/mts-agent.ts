@@ -2,7 +2,9 @@ import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql, type Sql } from "@/lib/db";
 import { knowledgeBrief } from "@/lib/portal/knowledge";
-import { syncStaffTicketAction } from "@/lib/portal/api";
+import { resolveDeskRole, syncStaffTicketAction } from "@/lib/portal/api";
+import { assertAiSurface, workspaceForUser } from "@/lib/portal/configuration/service";
+import { canUseAiTool, type Workspace } from "@/lib/portal/permissions/resolve";
 import { askOllamaCli, askOpenCodeCli, isLocalProvider, listLocalModels, localOrigin, safeModel } from "@/lib/portal/local-models";
 import { conversationsConfig } from "@/lib/portal/zendesk-conversations";
 
@@ -50,24 +52,32 @@ function providerId(value: string): ProviderId {
 type DeskUser = { userId: string; name: string; email: string; role: string; organizationId: number | null };
 
 async function requireDesk(sql: Sql, userId: string, write: boolean) {
-  const users = await sql<Row>`select name, email from "user" where id = ${userId} limit 1`;
-  const email = users[0] ? s(users[0], "email").trim().toLowerCase() : "";
-  const owner = (process.env.ZENDESK_EMAIL || process.env.BOOTSTRAP_OWNER_EMAIL || "admin@abitech.site").trim().toLowerCase();
-  if (email && email === owner) {
-    await sql`
-      insert into portal_staff (user_id, name, email, role, active)
-      values (${userId}, ${s(users[0], "name") || email}, ${email}, 'owner', true)
-      on conflict (user_id) do update set role = 'owner', active = true, email = excluded.email
-    `;
-    return { userId, name: s(users[0], "name") || email, email, role: "owner", organizationId: null };
-  }
-  const rows = await sql<Row>`select role, active, name, email, organization_id from portal_staff where user_id = ${userId} limit 1`;
+  // Same resolution as the rest of the portal (verified owner email, no silent re-provisioning).
+  const role = await resolveDeskRole(sql, userId);
+  if (!role) throw new Error("This desk is for signed-in staff.");
+  const rows = await sql<Row>`select name, email, organization_id from portal_staff where user_id = ${userId} limit 1`;
   const row = rows[0];
-  if (!row || row.active === false) throw new Error("This desk is for signed-in staff.");
-  const role = s(row, "role");
   if (write && role === "viewer") throw new Error("View-only access. An admin has to save the API key.");
-  const scoped = role === "owner" || role === "admin" || role === "agent" ? null : Number(row.organization_id) || null;
+  const scoped = role === "owner" || role === "admin" || role === "agent" ? null : Number(row?.organization_id) || null;
   return { userId, name: s(row, "name"), email: s(row, "email"), role, organizationId: scoped };
+}
+
+/** Per-request cache of the caller's resolved workspace (the source of truth for which AI tools may run). */
+const workspaces = new WeakMap<DeskUser, Workspace>();
+
+async function aiWorkspace(sql: Sql, actor: DeskUser) {
+  let workspace = workspaces.get(actor);
+  if (!workspace) {
+    workspace = await workspaceForUser(sql, actor.userId);
+    workspaces.set(actor, workspace);
+  }
+  return workspace;
+}
+
+/** Tool definitions the model may see: only tools this caller may run. Empty until aiWorkspace() has resolved (fail closed). */
+function allowedTools(actor: DeskUser) {
+  const workspace = workspaces.get(actor);
+  return workspace ? TOOLS.filter((tool) => canUseAiTool(workspace, tool.name)) : [];
 }
 
 function systemPrompt(actor: DeskUser) {
@@ -409,6 +419,9 @@ export const askZendeskWidget = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const sql = await getSql();
     const actor = await signedInActor(sql, context.userId);
+    const workspace = await aiWorkspace(sql, actor);
+    assertAiSurface(workspace, "chat");
+    if (!workspace.ai.assistant) throw new Error("The assistant is turned off for your portal.");
     const answer = await zendeskAgent(sql, actor, data.messages, []);
     return { answer };
   });
@@ -419,7 +432,10 @@ function geminiCallerKey() {
 
 export const mintLiveToken = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .handler(async () => {
+  .handler(async ({ context }) => {
+    const sql = await getSql();
+    const workspace = await workspaceForUser(sql, context.userId);
+    assertAiSurface(workspace, "voice");
     const key = geminiCallerKey();
     if (!key) throw new Error("The call voice is not configured.");
     const response = await fetch(`https://generativelanguage.googleapis.com/v1alpha/auth_tokens?key=${encodeURIComponent(key)}`, {
@@ -436,7 +452,7 @@ export const mintLiveToken = createServerFn({ method: "POST" })
     if (!response.ok || !data.name?.startsWith("auth_tokens/")) {
       throw new Error(data.error?.message || "The call voice could not start.");
     }
-    return { token: data.name, model: "models/gemini-3.8-live", voice: "Zephyr" };
+    return { token: data.name, model: "models/gemini-3.8-live", voice: "Zephyr", tools: workspace.ai.tools };
   });
 
 export const runLiveTool = createServerFn({ method: "POST" })
@@ -450,6 +466,7 @@ export const runLiveTool = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const sql = await getSql();
     const actor = await signedInActor(sql, context.userId);
+    assertAiSurface(await aiWorkspace(sql, actor), "voice");
     const result = await runTool(sql, actor, data.name, data.args);
     return { result: String(result || "").slice(0, 4000) };
   });
@@ -1008,25 +1025,31 @@ const TOOLS = [
   { name: "order_product", description: "Place a catalog product on an order for the signed-in account. Use this when they ask to order or buy a product.", parameters: { type: "object", properties: { query: { type: "string" } }, required: ["query"] } },
 ];
 
-function openaiTools() {
-  return TOOLS.map((tool) => ({ type: "function", function: { name: tool.name, description: tool.description, parameters: tool.parameters } }));
+function openaiTools(actor: DeskUser) {
+  return allowedTools(actor).map((tool) => ({ type: "function", function: { name: tool.name, description: tool.description, parameters: tool.parameters } }));
 }
 
 type ToolMode = "full" | "functions" | "off";
 
-function functionTools() {
-  return TOOLS.map((tool) => ({ name: tool.name, description: tool.description, input_schema: tool.parameters }));
+function functionTools(actor: DeskUser) {
+  return allowedTools(actor).map((tool) => ({ name: tool.name, description: tool.description, input_schema: tool.parameters }));
 }
 
-function anthropicTools(mode: ToolMode) {
+function anthropicTools(mode: ToolMode, actor: DeskUser) {
   if (mode === "off") return undefined;
-  return mode === "full" ? [{ type: "web_search_20250305", name: "web_search", max_uses: 3 }, ...functionTools()] : functionTools();
+  const web = mode === "full" && workspaces.get(actor)?.ai.tools.includes("web_search");
+  const tools = web ? [{ type: "web_search_20250305", name: "web_search", max_uses: 3 }, ...functionTools(actor)] : functionTools(actor);
+  return tools.length ? tools : undefined;
 }
 
-function geminiTools(mode: ToolMode) {
-  const functions = { functionDeclarations: TOOLS.map((tool) => ({ name: tool.name, description: tool.description, parameters: tool.parameters })) };
+function geminiTools(mode: ToolMode, actor: DeskUser) {
   if (mode === "off") return undefined;
-  return mode === "full" ? [{ google_search: {} }, functions] : [functions];
+  const declared = allowedTools(actor).map((tool) => ({ name: tool.name, description: tool.description, parameters: tool.parameters }));
+  const web = mode === "full" && workspaces.get(actor)?.ai.tools.includes("search_web");
+  const tools: Record<string, unknown>[] = [];
+  if (web) tools.push({ google_search: {} });
+  if (declared.length) tools.push({ functionDeclarations: declared });
+  return tools.length ? tools : undefined;
 }
 
 function toolRejected(message: string) {
@@ -1183,6 +1206,8 @@ async function browsePage(raw: string) {
 }
 
 async function runTool(sql: Sql, actor: DeskUser, name: string, raw: unknown) {
+  // Enforced on every call, however the call arrived (model, voice, or a keyword shortcut).
+  if (!canUseAiTool(await aiWorkspace(sql, actor), name)) return "That isn't available to the assistant on this portal.";
   const args = argsOf(raw);
   const ownTools = new Set(["my_tickets", "my_ticket", "create_ticket", "reply_ticket", "update_ticket", "search_orders", "search_catalog", "order_product"]);
   if (actor.role === "customer" && !ownTools.has(name)) return "That stays on this signed-in account. I can open and check your tickets, orders, and catalog.";
@@ -1624,6 +1649,7 @@ async function openCodeMachine(model: string, stored: string, prompt: string, me
 }
 
 async function complete(sql: Sql, actor: DeskUser, provider: ProviderId, apiKey: string, model: string, messages: ChatMessage[], files: ChatFile[], onDelta?: (text: string) => void) {
+  assertAiSurface(await aiWorkspace(sql, actor), "chat");
   const logs: string[] = [];
   note(logs, `Using ${provider} · ${model}.`);
   try {
@@ -1737,7 +1763,7 @@ async function openai(sql: Sql, actor: DeskUser, apiKey: string, model: string, 
       messages: history,
       stream: true,
       [field]: limit,
-      ...(mode === "off" ? {} : { tools: openaiTools() }),
+      ...(mode === "off" || !openaiTools(actor).length ? {} : { tools: openaiTools(actor) }),
     }), /^(o\d|gpt-5)/i.test(model) ? "max_completion_tokens" : "max_tokens");
     let text = "";
     let thought = "";
@@ -1805,7 +1831,7 @@ async function anthropic(sql: Sql, actor: DeskUser, apiKey: string, model: strin
       "x-api-key": apiKey,
       "anthropic-version": "2023-06-01",
       "Content-Type": "application/json",
-    }, apiKey, (limit) => ({ model, max_tokens: limit, stream: true, system: prompt, messages: history, ...(anthropicTools(mode) ? { tools: anthropicTools(mode) } : {}) }));
+    }, apiKey, (limit) => ({ model, max_tokens: limit, stream: true, system: prompt, messages: history, ...(anthropicTools(mode, actor) ? { tools: anthropicTools(mode, actor) } : {}) }));
     const blocks: Row[] = [];
     for await (const line of streamLines(response)) {
       if (!line.startsWith("data:")) continue;
@@ -1867,7 +1893,7 @@ async function gemini(sql: Sql, actor: DeskUser, apiKey: string, model: string, 
     }
     return { role: message.role === "assistant" ? "model" : "user", parts };
   });
-  const toolBody = geminiTools(mode);
+  const toolBody = geminiTools(mode, actor);
   for (let turn = 0; turn < 4; turn += 1) {
     const response = await openCapped(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse&key=${encodeURIComponent(apiKey)}`, {
       "Content-Type": "application/json",
@@ -1929,7 +1955,7 @@ async function ollama(sql: Sql, actor: DeskUser, apiKey: string, model: string, 
     const response = await openStream("https://ollama.com/api/chat", {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model, messages: history, stream: true, options: { num_predict: -1 }, ...(mode === "off" ? {} : { tools: openaiTools() }) }),
+      body: JSON.stringify({ model, messages: history, stream: true, options: { num_predict: -1 }, ...(mode === "off" || !openaiTools(actor).length ? {} : { tools: openaiTools(actor) }) }),
     }, apiKey);
     let text = "";
     let thought = "";

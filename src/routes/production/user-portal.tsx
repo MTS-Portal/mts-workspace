@@ -71,8 +71,8 @@ function ProductionPortalLayout() {
     <PortalShell>
       {link.isError ? <p className="mb-4 rounded-xl bg-bad-soft px-4 py-3 text-sm text-bad">{link.error instanceof Error ? link.error.message : "The portal could not open this account."}</p> : null}
       {home ? <PortalHome /> : <Outlet />}
-      <ZendeskVoiceCall />
-      <ZendeskAgentWidget call />
+      {workspace.ai.voice ? <ZendeskVoiceCall /> : null}
+      {workspace.ai.assistant ? <ZendeskAgentWidget call={workspace.ai.voice} /> : null}
     </PortalShell>
   );
 }

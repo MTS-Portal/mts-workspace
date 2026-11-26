@@ -9,6 +9,7 @@
  */
 import { MODULES, moduleById, widgetById, type Entitlements, type ModuleIcon, type PortalRole, type WidgetSize } from "../modules/registry.ts";
 import type { PortalConfig } from "../configuration/schema.ts";
+import { AI_TOOLS } from "../ai/registry.ts";
 
 export type WorkspaceModule = {
   id: string;
@@ -17,11 +18,15 @@ export type WorkspaceModule = {
   route: string;
   routes: readonly string[];
   exact: boolean;
+  /** Listed in the menu (otherwise reachable by link only). */
+  nav: boolean;
   mobile: boolean;
   guide: string;
 };
 
 export type WorkspaceWidget = { id: string; size: WidgetSize };
+
+export type WorkspaceAi = { chat: boolean; voice: boolean; assistant: boolean; tools: string[] };
 
 export type Workspace = {
   role: PortalRole;
@@ -29,10 +34,18 @@ export type Workspace = {
   widgets: WorkspaceWidget[];
   landing: string;
   welcomeMessage: string;
+  ai: WorkspaceAi;
 };
 
 /** A workspace with nothing in it — what the UI shows while permissions load (fail closed). */
-export const EMPTY_WORKSPACE: Workspace = { role: "customer", modules: [], widgets: [], landing: "home", welcomeMessage: "" };
+export const EMPTY_WORKSPACE: Workspace = {
+  role: "customer",
+  modules: [],
+  widgets: [],
+  landing: "home",
+  welcomeMessage: "",
+  ai: { chat: false, voice: false, assistant: false, tools: [] },
+};
 
 export function entitledTo(moduleId: string, entitlements: Entitlements) {
   const def = moduleById(moduleId);
@@ -55,6 +68,7 @@ export function resolveWorkspace(config: PortalConfig, role: PortalRole, entitle
       route: def.route,
       routes: def.routes,
       exact: Boolean(def.exact),
+      nav: item.nav,
       mobile: item.mobile,
       guide: def.guide,
     });
@@ -64,7 +78,14 @@ export function resolveWorkspace(config: PortalConfig, role: PortalRole, entitle
     .filter((item) => item.enabled && visibleIds.has(widgetById(item.id)?.module ?? ""))
     .map((item) => ({ id: item.id, size: item.size }));
   const landing = visibleIds.has(settings.landing) ? settings.landing : "home";
-  return { role, modules, widgets, landing, welcomeMessage: config.welcomeMessage };
+  const anyAi = settings.ai.chat || settings.ai.voice;
+  const tools = anyAi
+    ? Object.entries(AI_TOOLS)
+        .filter(([, def]) => settings.ai.families[def.family] && !(def.staffOnly && role === "customer") && (!def.module || visibleIds.has(def.module)))
+        .map(([name]) => name)
+    : [];
+  const ai: WorkspaceAi = { chat: settings.ai.chat, voice: settings.ai.voice, assistant: settings.ai.assistant && settings.ai.chat, tools };
+  return { role, modules, widgets, landing, welcomeMessage: config.welcomeMessage, ai };
 }
 
 export function canAccessModule(workspace: Workspace, moduleId: string) {
@@ -101,6 +122,8 @@ export function canAccessPath(workspace: Workspace, path: string) {
   const here = canonicalPortalPath(path);
   if (here !== "/portal" && !here.startsWith("/portal/")) return true;
   if (PUBLIC_PORTAL_PATHS.some((route) => here === route || here.startsWith(`${route}/`))) return true;
+  // The call page is the voice assistant, governed by the AI voice setting rather than a nav tab.
+  if (here === "/portal/call" || here.startsWith("/portal/call/")) return workspace.ai.voice;
   const id = moduleForPath(here);
   return id ? canAccessModule(workspace, id) : false;
 }
@@ -124,4 +147,9 @@ export function entitlementsFromAccess(access: {
     billing: access.canShop || access.canDefer,
     services: access.canOrderIt || access.canOrderPhone,
   };
+}
+
+/** Whether an AI tool may run for this workspace. Unknown tools are denied. */
+export function canUseAiTool(workspace: Workspace, name: string) {
+  return workspace.ai.tools.includes(name);
 }

@@ -5899,6 +5899,18 @@ async function requirePortal(sql: Sql, token: string) {
   return { row, access: await accessFor(sql, row) };
 }
 
+/**
+ * requirePortal + the Portal Studio module gate: a module that is hidden for
+ * this caller (or not entitled) is refused here, not just hidden in the menu.
+ */
+async function requirePortalModule(sql: Sql, token: string, moduleId: string) {
+  const found = await requirePortal(sql, token);
+  // Imported on demand: configuration/service imports this file.
+  const { assertModule, workspaceForShopRow } = await import("./configuration/service");
+  assertModule(await workspaceForShopRow(sql, found.row), moduleId);
+  return found;
+}
+
 export async function loadPortalCustomer(token: string) {
   const sql = await getSql();
   const found = await requirePortal(sql, token);
@@ -6059,7 +6071,7 @@ export const submitPortalTicket = createServerFn({ method: "POST" })
   })
   .handler(async ({ data }) => {
     const sql = await getSql();
-    const { row, access } = await requirePortal(sql, data.token);
+    const { row, access } = await requirePortalModule(sql, data.token, "tickets");
     if (!access.canTicket) throw new Error("This account cannot open tickets.");
     const name = s(row, "name");
     const email = s(row, "email");
@@ -6495,7 +6507,7 @@ export const listMyComplaints = createServerFn({ method: "GET" })
   .validator((token: string) => str(token, 80))
   .handler(async ({ data }) => {
     const sql = await getSql();
-    const { row } = await requirePortal(sql, data);
+    const { row } = await requirePortalModule(sql, data, "complaints");
     const rows = await sql<Row>`
       select * from complaints where shop_customer_id = ${n(row, "id")} order by id desc limit 30
     `;
@@ -6580,7 +6592,7 @@ export const respondToQuote = createServerFn({ method: "POST" })
   })
   .handler(async ({ data }) => {
     const sql = await getSql();
-    const { row } = await requirePortal(sql, data.token);
+    const { row } = await requirePortalModule(sql, data.token, "quotes");
     const rows = await sql<Row>`
       select * from service_requests where id = ${data.id} and shop_customer_id = ${n(row, "id")}
     `;
@@ -6604,7 +6616,7 @@ export const submitComplaint = createServerFn({ method: "POST" })
   })
   .handler(async ({ data }) => {
     const sql = await getSql();
-    const { row } = await requirePortal(sql, data.token);
+    const { row } = await requirePortalModule(sql, data.token, "complaints");
     const ticket = await filePortalTicket(sql, {
       name: s(row, "name"),
       email: s(row, "email"),
@@ -6633,7 +6645,7 @@ export const replyPortalTicket = createServerFn({ method: "POST" })
   })
   .handler(async ({ data }) => {
     const sql = await getSql();
-    const { row } = await requirePortal(sql, data.token);
+    const { row } = await requirePortalModule(sql, data.token, "tickets");
     const tickets = await sql<Row>`
       select * from tickets where id = ${data.id} and lower(requester_email) = lower(${s(row, "email")})
     `;
@@ -6739,7 +6751,7 @@ export const requestPortalService = createServerFn({ method: "POST" })
   })
   .handler(async ({ data }) => {
     const sql = await getSql();
-    const { row, access } = await requirePortal(sql, data.token);
+    const { row, access } = await requirePortalModule(sql, data.token, "services");
     const items = await sql<Row>`select * from service_catalog where id = ${data.serviceId} and active = true`;
     const item = items[0];
     if (!item) throw new Error("That service is not in the catalog.");
@@ -6792,7 +6804,7 @@ export const orderCatalogService = createServerFn({ method: "POST" })
   })
   .handler(async ({ data }) => {
     const sql = await getSql();
-    const { row } = await requirePortal(sql, data.token);
+    const { row } = await requirePortalModule(sql, data.token, "order");
     const organizationId = nid(row, "organization_id") ?? (await ensureDeskOrganization(sql));
     const body = [data.name, data.site, data.notes].filter(Boolean).join("\n");
     const ticket = await filePortalTicket(sql, {
@@ -6832,7 +6844,7 @@ export const orderPortalOffering = createServerFn({ method: "POST" })
   })
   .handler(async ({ data }) => {
     const sql = await getSql();
-    const { row } = await requirePortal(sql, data.token);
+    const { row } = await requirePortalModule(sql, data.token, "order");
     const item = ORDER_OFFERINGS[data.offering];
     if (data.offering === "voip-ext" && !data.confirmMonthly) {
       throw new Error("Confirm the $18 monthly extension before this can be sent to Telxent.");
@@ -6878,7 +6890,7 @@ export const listPortalServices = createServerFn({ method: "GET" })
   .validator((token: string) => str(token, 80))
   .handler(async ({ data }): Promise<ServiceRequest[]> => {
     const sql = await getSql();
-    const { row } = await requirePortal(sql, data);
+    const { row } = await requirePortalModule(sql, data, "services");
     const rows = await sql<Row>`
       select * from service_requests
       where shop_customer_id = ${n(row, "id")}
