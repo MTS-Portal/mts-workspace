@@ -194,7 +194,7 @@ Invoice and purchase order never call an outside API. A purchase order can requi
 
 ## Auth
 
-`/login` is two columns. Google and Microsoft go through the auth broker (`grok-google`, `grok-microsoft`). Email and password are stored in this app's database. Set `VITE_AUTH_ENABLED=false` only for local work without a broker. Do not deploy with auth disabled.
+`/login` is two columns. Google and Microsoft sign in through Zendesk: `/api/zendesk/social?provider=google|microsoft` redirects to the Zendesk OAuth authorization page (`https://managetechservices-16737.zendesk.com/oauth/authorizations/new`), where Zendesk's own end-user screen offers “Sign in with Google” and “Sign in with Microsoft”. Zendesk holds those credentials, returns an authorization code to `/production/signin`, and `/api/zendesk/customer/callback` opens the portal session for that Zendesk user. The Grok auth broker (`GROK_AUTH_*`) is unused unless all three of its env vars are set. Email and password are stored in this app's database. Set `VITE_AUTH_ENABLED=false` only for local work without auth. Do not deploy with auth disabled.
 
 ## Project layout
 

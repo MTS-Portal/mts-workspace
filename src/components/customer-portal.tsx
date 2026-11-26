@@ -25,6 +25,8 @@ const NAV = [
 
 type TabTo = (typeof NAV)[number]["to"];
 const TAB_ORDER_KEY = "mts-portal-tab-order";
+/** Customers with no desk role only see these tabs. */
+const CUSTOMER_TABS: ReadonlySet<string> = new Set<string>(["/portal", "/portal/tickets"]);
 
 function defaultOrder(): TabTo[] {
   return NAV.map((item) => item.to);
@@ -112,7 +114,9 @@ export function PortalShell({ children }: { children: ReactNode }) {
   const name = user?.displayName || session.data?.customer.name || "there";
   const count = cart.reduce((sum, line) => sum + line.quantity, 0);
   const { tabs, drag, move } = useTabOrder();
-  const mobileTabs = tabs.slice(0, 5);
+  const customerOnly = Boolean(home.data && !home.data.desk);
+  const visibleTabs = customerOnly ? tabs.filter((item) => CUSTOMER_TABS.has(item.to)) : tabs;
+  const mobileTabs = visibleTabs.slice(0, 5);
 
   return (
     <div className="portal-stage grid min-h-dvh grid-rows-[auto_minmax(0,1fr)] text-ink">
@@ -124,7 +128,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
             <span className="truncate text-sm font-semibold">{current?.label ?? "MTS"}</span>
           </Link>
           <nav className="hidden min-w-0 items-center gap-1 overflow-x-auto md:col-start-1 md:flex" aria-label="Customer">
-            {tabs.map((item) => {
+            {visibleTabs.map((item) => {
               const href = portalHref(path, item.to);
               const active = isActive(path, item);
               return (
@@ -185,7 +189,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
               </div>
               <button type="button" aria-label="Close menu" onClick={() => setMenu(false)} className="grid size-10 shrink-0 place-items-center"><X className="size-5" /></button>
             </div>
-            {tabs.map((item) => {
+            {visibleTabs.map((item) => {
               const active = isActive(path, item);
               return (
                 <Link
@@ -212,7 +216,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
           </div>
         </div>
       ) : null}
-      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-line bg-surface px-1 pt-1 md:hidden" style={{ paddingBottom: "max(0.35rem, env(safe-area-inset-bottom))" }} aria-label="Portal">
+      <nav className="fixed inset-x-0 bottom-0 z-30 grid border-t border-line bg-surface px-1 pt-1 md:hidden" style={{ gridTemplateColumns: `repeat(${Math.max(1, mobileTabs.length)}, minmax(0, 1fr))`, paddingBottom: "max(0.35rem, env(safe-area-inset-bottom))" }} aria-label="Portal">
         {mobileTabs.map((item) => {
           const Icon = item.icon;
           const href = portalHref(path, item.to);

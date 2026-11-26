@@ -1,4 +1,4 @@
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { auth, authSigningSecret } from "./server";
 import { PUBLIC_APP_ORIGIN } from "./public-origin";
 
@@ -28,8 +28,43 @@ function page(title: string, message: string, status = 400) {
   return new Response(body, { status, headers: { "content-type": "text/html; charset=utf-8" } });
 }
 
-export async function startZendeskSocial(_request?: Request) {
-  return Response.redirect(SIGN_IN_PATH, 302);
+export type ZendeskSocialProvider = "google" | "microsoft";
+
+function readProvider(value: string | null | undefined): ZendeskSocialProvider {
+  return (value || "").trim().toLowerCase() === "microsoft" ? "microsoft" : "google";
+}
+
+/**
+ * Zendesk's own OAuth authorization page, which renders Zendesk's sign-in screen.
+ * Zendesk is the identity provider: once "Sign in with Google" / "Sign in with
+ * Microsoft" is enabled in Admin Center → Account > Security → End-user
+ * authentication, that screen offers those buttons and Zendesk holds the Google
+ * / Microsoft secrets. This app never talks to Google or Microsoft itself, and
+ * never federates through the Grok auth broker.
+ */
+export function zendeskSocialAuthorizeUrl(provider: ZendeskSocialProvider) {
+  const verifier = randomBytes(32).toString("base64url");
+  const payload = [
+    provider,
+    randomBytes(8).toString("hex"),
+    Date.now() + 10 * 60_000,
+    verifier,
+  ].join(".");
+  const url = new URL(`${HOST}/oauth/authorizations/new`);
+  url.searchParams.set("response_type", "code");
+  url.searchParams.set("client_id", clientId());
+  url.searchParams.set("redirect_uri", `${PUBLIC_APP_ORIGIN}${SIGN_IN_PATH}`);
+  url.searchParams.set("scope", "read");
+  url.searchParams.set("state", `${payload}.${sign(payload)}`);
+  url.searchParams.set("code_challenge", createHash("sha256").update(verifier).digest("base64url"));
+  url.searchParams.set("code_challenge_method", "S256");
+  return url.toString();
+}
+
+/** `/api/zendesk/social?provider=google|microsoft` → straight to Zendesk. */
+export async function startZendeskSocial(request?: Request) {
+  const provider = readProvider(request ? new URL(request.url).searchParams.get("provider") : null);
+  return Response.redirect(zendeskSocialAuthorizeUrl(provider), 302);
 }
 
 function readState(state: string) {

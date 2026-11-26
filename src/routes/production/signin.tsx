@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { authEnabled, signIn } from "@/lib/auth/client";
+import { authEnabled } from "@/lib/auth/client";
 import { confirmPortalPassword, requestPortalPassword, signInWithInvitation, signUpPortal } from "@/lib/auth/invited-sign-in";
 
 export const Route = createFileRoute("/production/signin")({
@@ -62,16 +62,13 @@ function ProductionSignIn() {
     if (verified === "expired") setError("That verification link expired. Sign in if you already verified, or ask MTS for a new one.");
   }, []);
 
-  function socialSignIn(providerId: "grok-google" | "grok-microsoft") {
+  // Google and Microsoft sign-in runs on Zendesk's own sign-in screen, so
+  // Zendesk owns those credentials and returns a Zendesk user we can read
+  // tickets for. The Grok auth broker is not involved.
+  function socialSignIn(provider: "google" | "microsoft") {
     setError("");
     setBusy(true);
-    void signIn(providerId, {
-      callbackURL: "/production/user-portal",
-      errorCallbackURL: "/production/signin",
-    }).catch((cause) => {
-      setError(cause instanceof Error ? cause.message : "Sign-in was cancelled.");
-      setBusy(false);
-    });
+    window.location.assign(`/api/zendesk/social?provider=${provider}`);
   }
 
   async function requestCode() {
@@ -177,11 +174,11 @@ function ProductionSignIn() {
           </p>
           {authEnabled && (mode === "sign-in" || mode === "sign-up") ? (
             <div className="mt-8 grid gap-3">
-              <button type="button" disabled={busy} onClick={() => socialSignIn("grok-google")} className="flex h-12 items-center justify-center gap-3 rounded-full border border-black/10 bg-white text-sm font-semibold disabled:opacity-50">
+              <button type="button" disabled={busy} onClick={() => socialSignIn("google")} className="flex h-12 items-center justify-center gap-3 rounded-full border border-black/10 bg-white text-sm font-semibold disabled:opacity-50">
                 <svg viewBox="0 0 18 18" className="h-4 w-4" aria-hidden="true"><path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.71v2.26h2.9c1.7-1.57 2.7-3.88 2.7-6.61z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.9-2.26c-.81.54-1.84.86-3.06.86-2.35 0-4.34-1.59-5.05-3.72H.96v2.33A9 9 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.95 10.7A5.41 5.41 0 0 1 3.66 9c0-.59.1-1.16.29-1.7V4.97H.96A9 9 0 0 0 0 9c0 1.45.35 2.82.96 4.03l2.99-2.33z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0A9 9 0 0 0 .96 4.97L3.95 7.3C4.66 5.17 6.65 3.58 9 3.58z"/></svg>
                 Continue with Google
               </button>
-              <button type="button" disabled={busy} onClick={() => socialSignIn("grok-microsoft")} className="flex h-12 items-center justify-center gap-3 rounded-full border border-black/10 bg-white text-sm font-semibold disabled:opacity-50">
+              <button type="button" disabled={busy} onClick={() => socialSignIn("microsoft")} className="flex h-12 items-center justify-center gap-3 rounded-full border border-black/10 bg-white text-sm font-semibold disabled:opacity-50">
                 <svg viewBox="0 0 18 18" className="h-4 w-4" aria-hidden="true"><path fill="#F25022" d="M1 1h7.5v7.5H1z"/><path fill="#7FBA00" d="M9.5 1H17v7.5H9.5z"/><path fill="#00A4EF" d="M1 9.5h7.5V17H1z"/><path fill="#FFB900" d="M9.5 9.5H17V17H9.5z"/></svg>
                 Continue with Microsoft
               </button>

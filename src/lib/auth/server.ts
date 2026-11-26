@@ -88,6 +88,15 @@ const grokIssuer = env("GROK_AUTH_ISSUER") ?? GROK_ISSUER_DEFAULT;
 const grokClientId = env("GROK_AUTH_CLIENT_ID") ?? PREVIEW_CLIENT_ID;
 const grokClientSecret = env("GROK_AUTH_CLIENT_SECRET") ?? PREVIEW_CLIENT_SECRET;
 
+// The broker is OPT-IN now. This app signs customers in through Zendesk (Google
+// and Microsoft run on Zendesk's own sign-in screen — see `./zendesk-social`), so
+// a broker provider is only registered when a real one is configured explicitly.
+// Without this the preview client's fallback issuer produced broken authorize
+// URLs (`…/api/auth/oauth2/authorize?idp=google`) that no domain ever served.
+const brokerConfigured = Boolean(
+  env("GROK_AUTH_ISSUER") && env("GROK_AUTH_CLIENT_ID") && env("GROK_AUTH_CLIENT_SECRET"),
+);
+
 /** True when federated sign-in is active (real auth is enforced). */
 export const authConfigured =
   !authDisabled && Boolean(grokClientId && grokClientSecret);
@@ -160,7 +169,7 @@ export const SESSION_TOKEN_COOKIE = "__Host-grok-auth.session_token";
 
 // Built separately so the `betterAuth({...})` call stays easy to edit without
 // breaking brackets (models often trip on the conditional plugin spread).
-const grokOAuthConfigs = authConfigured
+const grokOAuthConfigs = authConfigured && brokerConfigured
   ? GROK_PROVIDERS.map(({ providerId, idp }) => ({
       providerId,
       clientId: grokClientId as string,
