@@ -9,6 +9,11 @@ import { openPortalFromAuth } from "@/lib/portal/api";
 import { rewriteProductionPath } from "@/lib/portal/paths";
 import { setShopToken, useShopToken } from "@/lib/portal/shop-session";
 import { PortalHome } from "@/routes/portal/index";
+import { usePortalWorkspace } from "@/lib/portal/use-portal-workspace";
+import { moduleById } from "@/lib/portal/modules/registry";
+
+/** Send each browser tab to the configured landing page once, on first entry; Home stays reachable after that. */
+let landed = false;
 
 export const Route = createFileRoute("/production/user-portal")({
   component: ProductionPortalLayout,
@@ -53,8 +58,15 @@ function ProductionPortalLayout() {
     document.addEventListener("click", onClick, true);
     return () => document.removeEventListener("click", onClick, true);
   }, [navigate]);
-  if (!isPending && !user) return <Navigate to="/production/signin" />;
+  const { workspace, ready } = usePortalWorkspace();
   const home = path === "/production/user-portal" || path === "/production/user-portal/";
+  useEffect(() => {
+    if (!ready || landed) return;
+    landed = true;
+    const landing = moduleById(workspace.landing);
+    if (home && landing && landing.id !== "home") void navigate({ to: `/production/user-portal${landing.route.slice("/portal".length)}` as "/production/user-portal" });
+  }, [ready, home, workspace.landing, navigate]);
+  if (!isPending && !user) return <Navigate to="/production/signin" />;
   return (
     <PortalShell>
       {link.isError ? <p className="mb-4 rounded-xl bg-bad-soft px-4 py-3 text-sm text-bad">{link.error instanceof Error ? link.error.message : "The portal could not open this account."}</p> : null}

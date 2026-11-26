@@ -25,6 +25,7 @@ import {
   Users,
   Wrench,
   X,
+  LayoutTemplate,
 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { UserButton } from "@/lib/auth/gates";
@@ -50,6 +51,7 @@ const NAV = [
   { to: "/products", label: "Catalog", icon: Monitor, group: "Commerce" },
   { to: "/payments", label: "Payments", icon: CreditCard, group: "Commerce" },
   { to: "/forms", label: "Ticket forms", icon: ListTree, group: "Setup" },
+  { to: "/portal-builder", label: "Portal Studio", icon: LayoutTemplate, group: "Setup", adminOnly: true },
   { to: "/roles", label: "Roles", icon: Shield, group: "Setup" },
   { to: "/integrations", label: "Zendesk", icon: Cable, group: "Setup" },
   { to: "/settings", label: "Settings", icon: Settings, group: "Setup" },
@@ -77,6 +79,11 @@ function adminHref(path: string, to: string) {
 function adminActive(path: string, to: string, exact = false) {
   const href = adminHref(path, to);
   return exact ? path === href || path === `${href}/` : path === href || path.startsWith(`${href}/`);
+}
+
+/** Admin-only entries stay hidden until the role is known (fail closed). The server enforces access too. */
+function navAllowed(item: object, role: Role | undefined) {
+  return !("adminOnly" in item && item.adminOnly) || role === "owner" || role === "admin";
 }
 
 function roleLabel(role: Role | undefined) {
@@ -168,7 +175,7 @@ export function Shell({ children }: { children: ReactNode }) {
             <div key={group}>
               {compact ? <div className="mx-2 mb-1 h-px bg-line" /> : <p className="px-2 pb-1 text-[11px] font-semibold tracking-[0.14em] text-subtle uppercase">{group}</p>}
               <div className="flex flex-col gap-0.5">
-                {NAV.filter((item) => item.group === group).map((item) => {
+                {NAV.filter((item) => item.group === group && navAllowed(item, info?.actor.role)).map((item) => {
                   const href = adminHref(path, item.to);
                   const active = adminActive(path, item.to, "exact" in item && item.exact);
                   const Icon = item.icon;
@@ -257,7 +264,7 @@ export function Shell({ children }: { children: ReactNode }) {
               </button>
             </div>
             <div className="grid grid-cols-3 gap-2">
-              {NAV.filter((item) => !MOBILE_TABS.includes(item.to as (typeof MOBILE_TABS)[number])).map((item) => {
+              {NAV.filter((item) => !MOBILE_TABS.includes(item.to as (typeof MOBILE_TABS)[number]) && navAllowed(item, info?.actor.role)).map((item) => {
                 const Icon = item.icon;
                 const active = adminActive(path, item.to);
                 const count = info ? NAV_COUNTS[item.to]?.(info) : undefined;
