@@ -1,0 +1,23 @@
+node_modules/
+.project_id
+.github_repo
+.env
+.env.*
+!.env.example
+
+# Build output and local caches
+.vercel/
+.tanstack/
+dist/
+.output/
+*.log
+
+# Grok preview caches (keep .grok config, references, and skills)
+.grok/e2e-vite/
+
+# Local working material, not part of the app
+artifacts/
+attachments/
+screenshots/
+
+.DS_Store
