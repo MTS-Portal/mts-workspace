@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Navigate, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { Shell } from "@/components/shell";
+import { Boot } from "@/components/ui";
 import { ZendeskAgentWidget } from "@/components/zendesk-agent-widget";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { getSessionHome } from "@/lib/portal/api";
@@ -47,7 +48,9 @@ function ProductionAdminLayout() {
     return () => document.removeEventListener("click", onClick, true);
   }, [navigate]);
   if (!isPending && !user) return <Navigate to="/production/signin" />;
-  if (home.isSuccess && home.data && !home.data.desk) return <Navigate to="/production/user-portal" />;
+  // Fail closed: no staff shell until the role is confirmed.
+  if (isPending || !home.isSuccess) return home.isError ? <Navigate to="/production/user-portal" /> : <Boot />;
+  if (!home.data.desk) return <Navigate to="/production/user-portal" />;
   return (
     <Shell>
       <Outlet />
