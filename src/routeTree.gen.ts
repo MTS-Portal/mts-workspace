@@ -29,6 +29,7 @@ import { Route as AppPortalBuilderRouteImport } from './routes/_app/portal-build
 import { Route as AppProductsRouteImport } from './routes/_app/products'
 import { Route as AppRolesRouteImport } from './routes/_app/roles'
 import { Route as AppRoutingRouteImport } from './routes/_app/routing'
+import { Route as AppScheduleRouteImport } from './routes/_app/schedule'
 import { Route as AppServicesRouteImport } from './routes/_app/services'
 import { Route as AppSettingsRouteImport } from './routes/_app/settings'
 import { Route as AppUsersRouteImport } from './routes/_app/users'
@@ -229,6 +230,11 @@ const AppRolesRoute = AppRolesRouteImport.update({
 const AppRoutingRoute = AppRoutingRouteImport.update({
   id: '/routing',
   path: '/routing',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppScheduleRoute = AppScheduleRouteImport.update({
+  id: '/schedule',
+  path: '/schedule',
   getParentRoute: () => AppRoute,
 } as any)
 const AppServicesRoute = AppServicesRouteImport.update({
@@ -807,6 +813,7 @@ export interface FileRoutesByFullPath {
   '/products': typeof AppProductsRoute
   '/roles': typeof AppRolesRoute
   '/routing': typeof AppRoutingRoute
+  '/schedule': typeof AppScheduleRoute
   '/services': typeof AppServicesRoute
   '/settings': typeof AppSettingsRoute
   '/users': typeof AppUsersRoute
@@ -929,6 +936,7 @@ export interface FileRoutesByTo {
   '/products': typeof AppProductsRoute
   '/roles': typeof AppRolesRoute
   '/routing': typeof AppRoutingRoute
+  '/schedule': typeof AppScheduleRoute
   '/services': typeof AppServicesRoute
   '/settings': typeof AppSettingsRoute
   '/users': typeof AppUsersRoute
@@ -1052,6 +1060,7 @@ export interface FileRoutesById {
   '/_app/products': typeof AppProductsRoute
   '/_app/roles': typeof AppRolesRoute
   '/_app/routing': typeof AppRoutingRoute
+  '/_app/schedule': typeof AppScheduleRoute
   '/_app/services': typeof AppServicesRoute
   '/_app/settings': typeof AppSettingsRoute
   '/_app/users': typeof AppUsersRoute
@@ -1177,6 +1186,7 @@ export interface FileRouteTypes {
     | '/products'
     | '/roles'
     | '/routing'
+    | '/schedule'
     | '/services'
     | '/settings'
     | '/users'
@@ -1299,6 +1309,7 @@ export interface FileRouteTypes {
     | '/products'
     | '/roles'
     | '/routing'
+    | '/schedule'
     | '/services'
     | '/settings'
     | '/users'
@@ -1421,6 +1432,7 @@ export interface FileRouteTypes {
     | '/_app/products'
     | '/_app/roles'
     | '/_app/routing'
+    | '/_app/schedule'
     | '/_app/services'
     | '/_app/settings'
     | '/_app/users'
@@ -1702,6 +1714,13 @@ declare module '@tanstack/react-router' {
       path: '/routing'
       fullPath: '/routing'
       preLoaderRoute: typeof AppRoutingRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/schedule': {
+      id: '/_app/schedule'
+      path: '/schedule'
+      fullPath: '/schedule'
+      preLoaderRoute: typeof AppScheduleRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/services': {
@@ -2435,6 +2454,7 @@ interface AppRouteChildren {
   AppProductsRoute: typeof AppProductsRoute
   AppRolesRoute: typeof AppRolesRoute
   AppRoutingRoute: typeof AppRoutingRoute
+  AppScheduleRoute: typeof AppScheduleRoute
   AppServicesRoute: typeof AppServicesRoute
   AppSettingsRoute: typeof AppSettingsRoute
   AppUsersRoute: typeof AppUsersRoute
@@ -2462,6 +2482,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppProductsRoute: AppProductsRoute,
   AppRolesRoute: AppRolesRoute,
   AppRoutingRoute: AppRoutingRoute,
+  AppScheduleRoute: AppScheduleRoute,
   AppServicesRoute: AppServicesRoute,
   AppSettingsRoute: AppSettingsRoute,
   AppUsersRoute: AppUsersRoute,

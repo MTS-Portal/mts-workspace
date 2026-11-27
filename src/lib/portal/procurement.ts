@@ -6,6 +6,7 @@ import { invoiceState, isInvoiceStatus, isOrderStatus, type InvoiceStatus } from
 export { ORDER_LIFECYCLE, INVOICE_STATUS } from "./procurement-rules";
 export type { OrderStatus, InvoiceStatus } from "./procurement-rules";
 import { enqueueJob } from "./commerce";
+import { syncSheet } from "./sheets-sync";
 
 type Row = Record<string, unknown>;
 
@@ -237,6 +238,14 @@ export const saveProcurement = createServerFn({ method: "POST" })
     await notify(sql, "procurement", `${data.id ? "Procurement updated" : "Procurement added"}${rec.zendeskTicketId ? ` · #${rec.zendeskTicketId}` : ""}`, rec.description, `/production/admin-portal/orders`, `procurement:${rec.id}`, me.name);
     if (rec.missingCost) await notify(sql, "procurement_cost", `Missing procurement cost · record ${rec.id}`, rec.description, `/production/admin-portal/orders`, `procurement-cost:${rec.id}`, me.name);
     await enqueueJob(sql, "zendesk_ticket", rec.ticketId ? `ticket-${rec.ticketId}` : `procurement-${rec.id}`, { ticketId: rec.ticketId, procurementId: rec.id, syncZendesk: true }).catch(() => undefined);
+    await syncSheet("Orders", data.id ? "upsert" : "upsert", {
+      ProcurementId: rec.id, Ticket: rec.zendeskTicketId || rec.ticketId || "", Description: rec.description,
+      OrderStatus: rec.orderStatus, InvoiceStatus: rec.invoiceStatus, InvoiceNumber: rec.invoiceNumber, InvoiceSentDate: rec.invoiceSentDate ?? "",
+      BoughtFrom: rec.boughtFrom, VendorOrderNumber: rec.vendorOrderNumber, ActualPurchaseCost: rec.actualPurchaseCost, Currency: rec.currency,
+      Quantity: rec.quantity, ZendeskAssignee: rec.zendeskAssignee, ExpectedDelivery: rec.expectedDeliveryDate ?? "", ActualDelivery: rec.actualDeliveryDate ?? "",
+      Tracking: rec.shipmentTracking, DeliveryTechnician: rec.deliveryTechnician, InstallationTechnician: rec.installationTechnician,
+      UpdatedBy: me.name, UpdatedAt: new Date().toISOString(), Notes: rec.notes,
+    }, rec.id, me.name).catch(() => undefined);
     return rec;
   });
 
