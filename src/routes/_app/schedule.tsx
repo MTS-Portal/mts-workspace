@@ -90,7 +90,7 @@ function SchedulePage() {
             <Button type="button" variant="secondary" onClick={() => { const [y, m] = todayLA.split("-").map(Number); setCursor({ year: y, month0: m - 1 }); setSelectedDay(todayLA); }}>Today</Button>
           </div>
           <div className="flex gap-1" role="tablist" aria-label="Calendar view">
-            <Button type="button" variant={mode === "month" ? "primary" : "secondary"} onClick={() => setMode("month")}>Month</Button>
+            <Button type="button" variant={mode === "month" ? "primary" : "secondary"} onClick={() => setMode("month")}>Calendar</Button>
             <Button type="button" variant={mode === "day" ? "primary" : "secondary"} onClick={() => setMode("day")}>Day</Button>
           </div>
         </div>

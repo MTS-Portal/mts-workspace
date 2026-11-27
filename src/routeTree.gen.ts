@@ -18,6 +18,7 @@ import { Route as PortalRouteImport } from './routes/portal'
 import { Route as UpgradeRouteImport } from './routes/upgrade'
 import { Route as AppAccessRouteImport } from './routes/_app/access'
 import { Route as AppAgentRouteImport } from './routes/_app/agent'
+import { Route as AppCalendarRouteImport } from './routes/_app/calendar'
 import { Route as AppCampaignsRouteImport } from './routes/_app/campaigns'
 import { Route as AppDashboardRouteImport } from './routes/_app/dashboard'
 import { Route as AppDocsRouteImport } from './routes/_app/docs'
@@ -175,6 +176,11 @@ const AppAccessRoute = AppAccessRouteImport.update({
 const AppAgentRoute = AppAgentRouteImport.update({
   id: '/agent',
   path: '/agent',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppCalendarRoute = AppCalendarRouteImport.update({
+  id: '/calendar',
+  path: '/calendar',
   getParentRoute: () => AppRoute,
 } as any)
 const AppCampaignsRoute = AppCampaignsRouteImport.update({
@@ -802,6 +808,7 @@ export interface FileRoutesByFullPath {
   '/upgrade': typeof UpgradeRoute
   '/access': typeof AppAccessRoute
   '/agent': typeof AppAgentRoute
+  '/calendar': typeof AppCalendarRoute
   '/campaigns': typeof AppCampaignsRoute
   '/dashboard': typeof AppDashboardRoute
   '/docs': typeof AppDocsRoute
@@ -925,6 +932,7 @@ export interface FileRoutesByTo {
   '/upgrade': typeof UpgradeRoute
   '/access': typeof AppAccessRoute
   '/agent': typeof AppAgentRoute
+  '/calendar': typeof AppCalendarRoute
   '/campaigns': typeof AppCampaignsRoute
   '/dashboard': typeof AppDashboardRoute
   '/docs': typeof AppDocsRoute
@@ -1049,6 +1057,7 @@ export interface FileRoutesById {
   '/upgrade': typeof UpgradeRoute
   '/_app/access': typeof AppAccessRoute
   '/_app/agent': typeof AppAgentRoute
+  '/_app/calendar': typeof AppCalendarRoute
   '/_app/campaigns': typeof AppCampaignsRoute
   '/_app/dashboard': typeof AppDashboardRoute
   '/_app/docs': typeof AppDocsRoute
@@ -1175,6 +1184,7 @@ export interface FileRouteTypes {
     | '/upgrade'
     | '/access'
     | '/agent'
+    | '/calendar'
     | '/campaigns'
     | '/dashboard'
     | '/docs'
@@ -1298,6 +1308,7 @@ export interface FileRouteTypes {
     | '/upgrade'
     | '/access'
     | '/agent'
+    | '/calendar'
     | '/campaigns'
     | '/dashboard'
     | '/docs'
@@ -1421,6 +1432,7 @@ export interface FileRouteTypes {
     | '/upgrade'
     | '/_app/access'
     | '/_app/agent'
+    | '/_app/calendar'
     | '/_app/campaigns'
     | '/_app/dashboard'
     | '/_app/docs'
@@ -1637,6 +1649,13 @@ declare module '@tanstack/react-router' {
       path: '/agent'
       fullPath: '/agent'
       preLoaderRoute: typeof AppAgentRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/calendar': {
+      id: '/_app/calendar'
+      path: '/calendar'
+      fullPath: '/calendar'
+      preLoaderRoute: typeof AppCalendarRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/campaigns': {
@@ -2443,6 +2462,7 @@ declare module '@tanstack/react-router' {
 interface AppRouteChildren {
   AppAccessRoute: typeof AppAccessRoute
   AppAgentRoute: typeof AppAgentRoute
+  AppCalendarRoute: typeof AppCalendarRoute
   AppCampaignsRoute: typeof AppCampaignsRoute
   AppDashboardRoute: typeof AppDashboardRoute
   AppDocsRoute: typeof AppDocsRoute
@@ -2471,6 +2491,7 @@ interface AppRouteChildren {
 const AppRouteChildren: AppRouteChildren = {
   AppAccessRoute: AppAccessRoute,
   AppAgentRoute: AppAgentRoute,
+  AppCalendarRoute: AppCalendarRoute,
   AppCampaignsRoute: AppCampaignsRoute,
   AppDashboardRoute: AppDashboardRoute,
   AppDocsRoute: AppDocsRoute,
