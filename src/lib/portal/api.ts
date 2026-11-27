@@ -4978,7 +4978,7 @@ export const getSettings = createServerFn({ method: "GET" })
         customerCatalogVisible: row.customer_catalog_visible == null ? true : b(row, "customer_catalog_visible"),
       },
       mail: {
-        fromEmail: fromMatch?.[1] || mail.from || "noreply@managetech.cloudgpu.site",
+        fromEmail: fromMatch?.[1] || mail.from || "noreply@portal.managetechservice.com",
         keySet: Boolean(mail.key),
         status: s(row, "resend_status"),
         error: s(row, "resend_error"),

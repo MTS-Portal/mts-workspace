@@ -14,7 +14,7 @@ user-invocable: false
 # Auth
 
 This app runs its **own** [Better Auth](https://better-auth.com) at
-`/api/auth/*`, federating to the shared **Grok auth broker** (`managetech.cloudgpu.site`)
+`/api/auth/*`, federating to the shared **Grok auth broker** (`portal.managetechservice.com`)
 via the `genericOAuth` plugin. This template wires **Google** and **X**.
 
 **Supported sign-in methods — use ONLY these three; nothing else is supported:
