@@ -36,7 +36,7 @@ export function IntegrationPage() {
     setClearToken(false);
     setOauthClientId(query.data.oauthClientId);
     setOauthClientSecret("");
-    setOauthScopes("read write");
+    setOauthScopes(query.data.oauthScopes || "read write");
     setClearOauth(false);
     setConversationsAppId(query.data.conversationsAppId);
     setConversationsKeyId(query.data.conversationsKeyId);
@@ -100,14 +100,14 @@ export function IntegrationPage() {
       <PageHeader
         eyebrow="Connection"
         title="Zendesk"
-        description="One managetechservices-16737 Zendesk account for every customer and staff member. Tickets, people, and companies use this connection. It is not tied to the person who is signed in."
+        description="One managetechservicehelp Zendesk account for every customer and staff member. Tickets, people, and companies use this connection. It is not tied to the person who is signed in."
       />
       <a href="/api/zendesk/oauth/start" className="inline-flex h-10 w-fit items-center rounded-full bg-ink px-4 text-sm font-semibold text-white">Connect Zendesk admin</a>
       <Panel>
         <h2 className="text-sm font-semibold">Order email triggers</h2>
         <p className="mt-1 text-sm text-muted">Zendesk sends the invoice. The portal only files a ticket tagged <span className="font-mono">order</span>, with the customer as the requester and the invoice as a public comment. These two triggers are what actually mail it.</p>
         <ol className="mt-3 grid list-decimal gap-3 pl-5 text-sm">
-          <li>Open <a className="font-medium underline" href="https://managetechservices-16737.zendesk.com/admin/objects-rules/rules/triggers" target="_blank" rel="noreferrer">Admin Center → Objects and rules → Business rules → Triggers</a> while signed in as the account owner.</li>
+          <li>Open <a className="font-medium underline" href="https://managetechservicehelp.zendesk.com/admin/objects-rules/rules/triggers" target="_blank" rel="noreferrer">Admin Center → Objects and rules → Business rules → Triggers</a> while signed in as the account owner.</li>
           <li>Click <span className="font-medium">Add trigger</span>. Name it <span className="font-medium">MTS order confirmation</span>. Leave it active.</li>
           <li>
             Under <span className="font-medium">Meet ALL of the following conditions</span>, add:
@@ -165,7 +165,7 @@ export function IntegrationPage() {
             }}
           >
             <Field label="Subdomain" hint={locked ? "Taken from ZENDESK_SUBDOMAIN." : "The part before .zendesk.com"}>
-              <Input value={subdomain} onChange={(event) => setSubdomain(event.target.value)} placeholder="managetechservices-16737" autoComplete="off" readOnly={locked} />
+              <Input value={subdomain} onChange={(event) => setSubdomain(event.target.value)} placeholder="managetechservicehelp" autoComplete="off" readOnly={locked} />
             </Field>
             <Field label="Agent email" hint={locked ? "Taken from ZENDESK_EMAIL." : undefined}>
               <Input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="off" readOnly={locked} />
@@ -235,7 +235,7 @@ export function IntegrationPage() {
           <Panel>
             <h2 className="text-sm font-semibold">{data.mtsAuth.name}</h2>
             <p className="mt-1 text-sm text-muted">Authorization code client for the Zendesk connection. Paste these into Zendesk. Do not leave the authorize or token URL on the site root.</p>
-            <p className="mt-2 text-sm text-muted">API tokens are being removed by Zendesk. Sign in to Zendesk as admin@abitech.site, then open <a className="font-medium underline" href="/api/zendesk/oauth/start">Connect admin</a>.</p>
+            <p className="mt-2 text-sm text-muted">API tokens are being removed by Zendesk. Sign in to Zendesk as yossi@managetechservice.com, then open <a className="font-medium underline" href="/api/zendesk/oauth/start">Connect admin</a>.</p>
             <dl className="mt-3 grid gap-2 text-sm">
               <div><dt className="text-xs text-muted">Name</dt><dd className="font-medium">{data.mtsAuth.name}</dd></div>
               <div><dt className="text-xs text-muted">Grant type</dt><dd>Authorization code</dd></div>
@@ -277,6 +277,34 @@ export function IntegrationPage() {
               <p className="mt-1 text-muted">
                 {data.oauthClientId ? `Authorization code · ${data.oauthClientId} · https://portal.managetechservice.com/api/oauth/token` : "Not set"}
               </p>
+              <dl className="mt-3 grid gap-2">
+                <div className="flex items-center justify-between gap-3">
+                  <dt className="text-muted">Admin grant</dt>
+                  <dd className="text-right font-medium">{data.oauthGrant ? "Refresh token stored" : "Not connected"}</dd>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <dt className="text-muted">Scopes</dt>
+                  <dd className="font-mono text-xs">{data.oauthScopes}</dd>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <dt className="text-muted">Access token</dt>
+                  <dd className="text-right font-medium">
+                    {data.tokenExpiresInSeconds == null
+                      ? "Not cached"
+                      : data.tokenExpiresInSeconds <= 0
+                        ? "Expired · refreshes on next call"
+                        : `Valid ${Math.max(1, Math.round(data.tokenExpiresInSeconds / 60))} min`}
+                  </dd>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <dt className="text-muted">Refresh lock</dt>
+                  <dd className="text-right">{data.refreshLocked ? "Refreshing now" : "Clear"}</dd>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <dt className="text-muted">Base URL</dt>
+                  <dd className="break-all text-right font-mono text-xs">https://{data.subdomain}.zendesk.com</dd>
+                </div>
+              </dl>
               <p className="mt-3 font-medium">Conversations API</p>
               <p className="mt-1 text-muted">{data.conversationsReady ? `Key ${data.conversationsKeyId} · app ${data.conversationsAppId}` : "Not set"}</p>
               <p className="mt-3 font-medium">Webhook</p>

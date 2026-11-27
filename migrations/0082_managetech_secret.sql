@@ -1,9 +1,10 @@
 update integration_settings
 set oauth_client_id = 'managetech',
-    oauth_client_secret = '32378d3f35a2ae1adfcde63fe3e17fa5f62b363b89cd2fa75bb256bab6314c9f',
+    -- Secret is intentionally NOT committed. Set ZENDESK_OAUTH_CLIENT_SECRET in the
+    -- environment; readZendesk() prefers real env over any value saved in the DB.
     oauth_scopes = 'read write',
-    subdomain = 'managetechservices-16737',
-    email = 'admin@abitech.site',
+    subdomain = 'managetechservicehelp',
+    email = 'yossi@managetechservice.com',
     last_status = 'saved',
     last_error = ''
 where id = 1;

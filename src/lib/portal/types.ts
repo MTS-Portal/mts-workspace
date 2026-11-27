@@ -260,6 +260,11 @@ export type Integration = {
   oauthClientId: string;
   oauthFromEnv: boolean;
   oauthSecretSet: boolean;
+  oauthGrant: boolean;
+  oauthScopes: string;
+  tokenExpiresAt: string | null;
+  tokenExpiresInSeconds: number | null;
+  refreshLocked: boolean;
 };
 
 export type PortalSettings = {

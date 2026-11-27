@@ -2,7 +2,19 @@ import { createHash, createHmac, randomBytes } from "node:crypto";
 import { getSql } from "@/lib/db";
 
 const SCOPES = "read write";
-const HOST = "https://managetechservices-16737.zendesk.com";
+const HOST = "https://managetechservicehelp.zendesk.com";
+
+function baseHost() {
+  const configured = process.env.ZENDESK_BASE_URL?.trim().replace(/\/+$/, "");
+  if (configured && /^https:\/\/[a-z0-9-]+\.zendesk\.com$/i.test(configured)) return configured;
+  return HOST;
+}
+
+function tokenUrl() {
+  const configured = process.env.ZENDESK_OAUTH_TOKEN_URL?.trim();
+  if (configured && /^https:\/\//i.test(configured)) return configured;
+  return `${baseHost()}/oauth/tokens`;
+}
 
 function clientId() {
   const id = process.env.ZENDESK_OAUTH_CLIENT_ID?.trim() || "managetech";
@@ -35,7 +47,7 @@ function page(title: string, message: string, status = 400) {
 export function zendeskAdminStart(request: Request) {
   const verifier = randomBytes(32).toString("base64url");
   const payload = `${randomBytes(16).toString("base64url")}.${Date.now() + 10 * 60 * 1000}.${verifier}`;
-  const url = new URL(`${HOST}/oauth/authorizations/new`);
+  const url = new URL(`${baseHost()}/oauth/authorizations/new`);
   url.searchParams.set("response_type", "code");
   url.searchParams.set("client_id", clientId());
   url.searchParams.set("redirect_uri", zendeskRedirectUri(request));
@@ -60,7 +72,7 @@ function validState(state: string) {
 }
 
 async function postToken(body: Record<string, string>) {
-  const response = await fetch(`${HOST}/oauth/tokens`, {
+  const response = await fetch(tokenUrl(), {
     method: "POST",
     headers: { Accept: "application/json", "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -77,40 +89,59 @@ export async function zendeskAdminCallback(request: Request) {
   if (!code || !verifier) return page("Sign-in expired", "Open the admin connection again.");
   const redirectUri = zendeskRedirectUri(request);
   const secret = clientSecret();
-  const base = {
+  if (!secret) {
+    return page(
+      "The Zendesk client secret is missing",
+      "Set ZENDESK_OAUTH_CLIENT_SECRET to the secret shown in the managetech Zendesk OAuth client, then try again.",
+      500,
+    );
+  }
+  // `managetech` is a confidential client: Zendesk requires the secret on the
+  // authorization-code exchange itself, not just as a retry.
+  const result = await postToken({
     grant_type: "authorization_code",
     code,
     client_id: clientId(),
+    client_secret: secret,
     redirect_uri: redirectUri,
     code_verifier: verifier,
     scope: SCOPES,
-  };
-  let result = await postToken(base);
-  if (!result.ok && secret && /did not include its credentials/i.test(result.tokenText)) {
-    result = await postToken({ ...base, client_secret: secret });
-  }
+  });
   if (!result.ok) return page("Zendesk refused the grant", result.tokenText.replaceAll(secret, "").slice(0, 280));
-  const parsed = JSON.parse(result.tokenText) as { access_token?: string; refresh_token?: string };
+  const parsed = JSON.parse(result.tokenText) as {
+    access_token?: string;
+    refresh_token?: string;
+    expires_in?: number;
+    scope?: string;
+  };
   if (!parsed.access_token) return page("Zendesk refused the grant", "No access token was returned.");
-  const meResponse = await fetch(`${HOST}/api/v2/users/me.json`, {
+  const meResponse = await fetch(`${baseHost()}/api/v2/users/me.json`, {
     headers: { Authorization: `Bearer ${parsed.access_token}`, Accept: "application/json" },
   });
-  const me = (await meResponse.json()) as { user?: { email?: string; role?: string } };
+  const me = (await meResponse.json().catch(() => ({}))) as { user?: { email?: string; role?: string } };
   const email = me.user?.email?.trim().toLowerCase() || "";
   const role = me.user?.role || "";
   if (!meResponse.ok || role === "end-user") {
-    return page("This Zendesk login cannot run the desk", `${email || "That account"} is ${role || "not an agent"}. Sign in to Zendesk as admin@abitech.site, then open the connection again.`);
+    return page("This Zendesk login cannot run the desk", `${email || "That account"} is ${role || "not an agent"}. Sign in to Zendesk as yossi@managetechservice.com, then open the connection again.`);
   }
+  const ttl = typeof parsed.expires_in === "number" && parsed.expires_in > 60 ? parsed.expires_in * 1000 : 30 * 60 * 1000;
+  const expiresAt = new Date(Date.now() + ttl).toISOString();
   const sql = await getSql();
   await sql`alter table integration_settings add column if not exists oauth_access_token text not null default ''`;
+  await sql`alter table integration_settings add column if not exists oauth_access_expires_at timestamptz`;
+  await sql`alter table integration_settings add column if not exists oauth_refresh_lock_at timestamptz`;
   await sql`
     update integration_settings
     set oauth_access_token = ${parsed.access_token},
-        oauth_refresh_token = ${parsed.refresh_token || ""},
+        oauth_refresh_token = case when ${parsed.refresh_token || ""} <> '' then ${parsed.refresh_token || ""} else oauth_refresh_token end,
+        oauth_access_expires_at = ${expiresAt},
+        oauth_refresh_lock_at = null,
+        oauth_client_id = ${clientId()},
+        oauth_scopes = ${parsed.scope || SCOPES},
         oauth_user_email = ${email},
         oauth_user_role = ${role},
-        subdomain = 'managetechservices-16737',
-        last_status = 'admin',
+        subdomain = 'managetechservicehelp',
+        last_status = 'connected',
         last_error = ''
     where id = 1
   `;

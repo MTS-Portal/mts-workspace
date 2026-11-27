@@ -254,8 +254,8 @@ function deskProvider(value: string) {
 
 function zendeskCreds() {
   const config = conversationsConfig();
-  const raw = (process.env.ZENDESK_SUBDOMAIN || "managetechservices-16737").trim();
-  const hostName = raw.replace(/^https?:\/\//i, "").replace(/\.zendesk\.com.*$/i, "").split("/")[0] || "managetechservices-16737";
+  const raw = (process.env.ZENDESK_SUBDOMAIN || "managetechservicehelp").trim();
+  const hostName = raw.replace(/^https?:\/\//i, "").replace(/\.zendesk\.com.*$/i, "").split("/")[0] || "managetechservicehelp";
   if (!config.ready) throw new Error("The Zendesk AI agent is not connected.");
   return { appId: config.appId, key: config.keyId, secret: config.secret, host: `https://${hostName}.zendesk.com` };
 }

@@ -658,7 +658,7 @@ function cleanSubdomain(raw: string) {
     .replace(/\.zendesk\.com.*$/i, "")
     .replace(/\/.*$/, "")
     .slice(0, 80);
-  if (!host || host === "mts-portal" || host === "shop") return "managetechservices-16737";
+  if (!host || host === "mts-portal" || host === "shop") return "managetechservicehelp";
   return host;
 }
 
@@ -678,7 +678,19 @@ type ZSettings = {
   oauthScopes: string;
   oauthRefreshToken: string;
   accessToken: string;
+  /** Epoch ms for the stored access token; 0 when the issuer gave no expiry. */
+  accessTokenExpiresAt: number;
 };
+
+function expiryMs(value: unknown): number {
+  if (value instanceof Date) return Number.isFinite(value.getTime()) ? value.getTime() : 0;
+  if (typeof value === "string" && value) {
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  return 0;
+}
 
 const DESK_CLIENT_ID = "managetech";
 const STALE_DESK_CLIENTS = new Set(["mts-portal", "mtsportal", "mts-auth", "manage_tech_service"]);
@@ -707,19 +719,20 @@ function envZendesk(): ZSettings {
     oauthScopes: (process.env.ZENDESK_OAUTH_SCOPES || "read write").trim(),
     oauthRefreshToken: "",
     accessToken: "",
+    accessTokenExpiresAt: 0,
   };
 }
 
 async function readZendesk(sql: Sql): Promise<ZSettings> {
   const envz = envZendesk();
-  const rows = await sql<Row>`select subdomain, email, api_token, oauth_client_id, oauth_client_secret, oauth_scopes, oauth_refresh_token, oauth_access_token from integration_settings where id = 1`;
+  const rows = await sql<Row>`select subdomain, email, api_token, oauth_client_id, oauth_client_secret, oauth_scopes, oauth_refresh_token, oauth_access_token, oauth_access_expires_at from integration_settings where id = 1`;
   const row = rows[0];
   const storedEmail = row ? s(row, "email").trim() : "";
   const storedSecret = row ? s(row, "oauth_client_secret").trim() : "";
   const storedToken = apiTokenUnlessSecret(row ? s(row, "api_token") : "", storedSecret || envz.oauthClientSecret);
   if (storedEmail && storedToken) {
     return {
-      subdomain: (row ? cleanSubdomain(s(row, "subdomain")) : "") || envz.subdomain || "managetechservices-16737",
+      subdomain: (row ? cleanSubdomain(s(row, "subdomain")) : "") || envz.subdomain || "managetechservicehelp",
       email: envz.email || storedEmail,
       apiToken: storedToken,
       fromEnv: false,
@@ -728,6 +741,7 @@ async function readZendesk(sql: Sql): Promise<ZSettings> {
       oauthScopes: row && s(row, "oauth_scopes") ? s(row, "oauth_scopes") : "read write",
       oauthRefreshToken: row ? s(row, "oauth_refresh_token") : "",
       accessToken: row ? s(row, "oauth_access_token") : "",
+      accessTokenExpiresAt: row ? expiryMs(row.oauth_access_expires_at) : 0,
     };
   }
   const envToken = apiTokenUnlessSecret(envz.apiToken, envz.oauthClientSecret || storedSecret);
@@ -740,6 +754,7 @@ async function readZendesk(sql: Sql): Promise<ZSettings> {
       oauthClientSecret: (row ? s(row, "oauth_client_secret") : "") || envz.oauthClientSecret,
       oauthRefreshToken: row ? s(row, "oauth_refresh_token") : "",
       accessToken: row ? s(row, "oauth_access_token") : "",
+      accessTokenExpiresAt: row ? expiryMs(row.oauth_access_expires_at) : 0,
       fromEnv: true,
     };
   }
@@ -752,11 +767,12 @@ async function readZendesk(sql: Sql): Promise<ZSettings> {
       oauthClientSecret: (row ? s(row, "oauth_client_secret") : "") || envz.oauthClientSecret,
       oauthRefreshToken: row ? s(row, "oauth_refresh_token") : "",
       accessToken: row ? s(row, "oauth_access_token") : "",
+      accessTokenExpiresAt: row ? expiryMs(row.oauth_access_expires_at) : 0,
       fromEnv: true,
     };
   }
   return {
-    subdomain: (row ? cleanSubdomain(s(row, "subdomain")) : "") || "managetechservices-16737",
+    subdomain: (row ? cleanSubdomain(s(row, "subdomain")) : "") || "managetechservicehelp",
     email: envz.email || storedEmail,
     apiToken: storedToken,
     fromEnv: false,
@@ -765,6 +781,7 @@ async function readZendesk(sql: Sql): Promise<ZSettings> {
     oauthScopes: row && s(row, "oauth_scopes") ? s(row, "oauth_scopes") : "read write",
     oauthRefreshToken: row ? s(row, "oauth_refresh_token") : "",
     accessToken: row ? s(row, "oauth_access_token") : "",
+    accessTokenExpiresAt: row ? expiryMs(row.oauth_access_expires_at) : 0,
   };
 }
 
@@ -808,96 +825,181 @@ async function oauthSecrets(settings: ZSettings) {
   return [...new Set(found.map((item) => item.trim()).filter(Boolean))];
 }
 
-async function refreshGrantedToken(settings: ZSettings) {
-  const key = `grant:${settings.oauthRefreshToken.slice(0, 16)}`;
+function tokenEndpoint(settings: ZSettings) {
+  const host = settings.subdomain || "managetechservicehelp";
+  return `https://${host}.zendesk.com/oauth/tokens`;
+}
+
+type GrantRow = { access: string; refresh: string; expiresAt: number; lockAt: number };
+
+async function readGrantRow(sql: Sql): Promise<GrantRow> {
+  const rows = await sql<Row>`select oauth_access_token, oauth_refresh_token, oauth_access_expires_at, oauth_refresh_lock_at from integration_settings where id = 1`;
+  const row = rows[0] ?? {};
+  return {
+    access: s(row, "oauth_access_token"),
+    refresh: s(row, "oauth_refresh_token"),
+    expiresAt: expiryMs(row.oauth_access_expires_at),
+    lockAt: expiryMs(row.oauth_refresh_lock_at),
+  };
+}
+
+function adoptGrant(settings: ZSettings, row: GrantRow) {
+  settings.accessToken = row.access;
+  settings.accessTokenExpiresAt = row.expiresAt;
+  if (row.refresh) settings.oauthRefreshToken = row.refresh;
+}
+
+/**
+ * Refresh the authorization-code grant. Zendesk rotates the refresh token on
+ * every use, so two concurrent refreshes would race and one would present a
+ * token the other already spent. A row-level claim (`oauth_refresh_lock_at`)
+ * makes the rotation atomic across serverless instances: the winner refreshes,
+ * the losers poll the row and adopt the newly stored token.
+ */
+async function refreshGrantedToken(settings: ZSettings, force = false) {
+  const oldRefresh = settings.oauthRefreshToken;
+  const key = `grant:${oldRefresh.slice(0, 24)}`;
   const cached = oauthCache.__zendeskOauth;
-  if (cached && cached.key === key && cached.expiresAt > Date.now() + 15_000) return cached.token;
+  if (!force && cached && cached.key === key && cached.expiresAt > Date.now() + 15_000) return cached.token;
   const client = deskClientId(settings.oauthClientId);
   const secrets = [...new Set([settings.oauthClientSecret, process.env.ZENDESK_OAUTH_CLIENT_SECRET || ""].map((item) => item.trim()).filter(Boolean))];
-  const host = settings.subdomain || "managetechservices-16737";
   const attempts: Record<string, string>[] = [
-    { grant_type: "refresh_token", refresh_token: settings.oauthRefreshToken, client_id: client, scope: settings.oauthScopes || "read write" },
+    { grant_type: "refresh_token", refresh_token: oldRefresh, client_id: client, scope: settings.oauthScopes || "read write" },
   ];
   for (const secret of secrets) attempts.push({ ...attempts[0], client_secret: secret });
-  let lastDetail = "Zendesk did not refresh the admin grant.";
-  for (const body of attempts) {
-    const response = await fetch(`https://${host}.zendesk.com/oauth/tokens`, {
-      method: "POST",
-      headers: { Accept: "application/json", "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const text = await response.text();
-    if (!response.ok) {
-      lastDetail = text.replaceAll(body.client_secret || "", "").slice(0, 180);
-      if (/multiple client credentials/i.test(text)) break;
-      continue;
+
+  const { getSql } = await import("@/lib/db");
+  const sql = await getSql();
+  await sql`alter table integration_settings add column if not exists oauth_access_token text not null default ''`;
+  await sql`alter table integration_settings add column if not exists oauth_access_expires_at timestamptz`;
+  await sql`alter table integration_settings add column if not exists oauth_refresh_lock_at timestamptz`;
+
+  const startAccess = settings.accessToken;
+  const claimed = await sql<Row>`
+    update integration_settings
+    set oauth_refresh_lock_at = now()
+    where id = 1
+      and oauth_refresh_token = ${oldRefresh}
+      and (oauth_refresh_lock_at is null or oauth_refresh_lock_at < now() - interval '45 seconds')
+    returning oauth_refresh_token
+  `;
+  if (!claimed.length) {
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      const row = await readGrantRow(sql);
+      if (row.access && row.access !== startAccess && (row.expiresAt === 0 || row.expiresAt > Date.now())) {
+        adoptGrant(settings, row);
+        oauthCache.__zendeskOauth = {
+          key: `grant:${settings.oauthRefreshToken.slice(0, 24)}`,
+          token: row.access,
+          expiresAt: row.expiresAt || Date.now() + 60_000,
+        };
+        return row.access;
+      }
+      if (row.refresh && row.refresh !== oldRefresh) {
+        settings.oauthRefreshToken = row.refresh;
+        settings.accessToken = row.access;
+        settings.accessTokenExpiresAt = row.expiresAt;
+        return refreshGrantedToken(settings, true);
+      }
+      if (row.lockAt === 0 && attempt > 0) break;
+      await sleep(400);
     }
-    const parsed = JSON.parse(text) as { access_token?: string; refresh_token?: string; expires_in?: number };
-    if (!parsed.access_token) continue;
-    const { getSql } = await import("@/lib/db");
-    const sql = await getSql();
-    await sql`alter table integration_settings add column if not exists oauth_access_token text not null default ''`;
-    await sql`
-      update integration_settings
-      set oauth_access_token = ${parsed.access_token},
-          oauth_refresh_token = ${parsed.refresh_token || settings.oauthRefreshToken}
-      where id = 1
-    `;
-    settings.accessToken = parsed.access_token;
-    if (parsed.refresh_token) settings.oauthRefreshToken = parsed.refresh_token;
-    const ttl = typeof parsed.expires_in === "number" && parsed.expires_in > 60 ? parsed.expires_in * 1000 : 30 * 60 * 1000;
-    oauthCache.__zendeskOauth = { key, token: parsed.access_token, expiresAt: Date.now() + ttl };
-    return parsed.access_token;
+    throw new Error("Zendesk is already refreshing the admin grant. Try again in a moment.");
   }
-  throw new Error(`Zendesk refused the admin grant. ${lastDetail}`);
+
+  let lastDetail = "Zendesk did not refresh the admin grant.";
+  try {
+    for (const body of attempts) {
+      const response = await fetch(tokenEndpoint(settings), {
+        method: "POST",
+        headers: { Accept: "application/json", "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const text = await response.text();
+      if (!response.ok) {
+        lastDetail = text.replaceAll(body.client_secret || "", "").slice(0, 180);
+        if (/multiple client credentials/i.test(text)) break;
+        continue;
+      }
+      const parsed = JSON.parse(text) as { access_token?: string; refresh_token?: string; expires_in?: number };
+      if (!parsed.access_token) continue;
+      const ttl = typeof parsed.expires_in === "number" && parsed.expires_in > 60 ? parsed.expires_in * 1000 : 30 * 60 * 1000;
+      const expiresAt = Date.now() + ttl;
+      const nextRefresh = parsed.refresh_token || oldRefresh;
+      // Guard on the token we claimed so a slower writer can never clobber a
+      // newer rotation.
+      const written = await sql<Row>`
+        update integration_settings
+        set oauth_access_token = ${parsed.access_token},
+            oauth_refresh_token = ${nextRefresh},
+            oauth_access_expires_at = ${new Date(expiresAt).toISOString()},
+            oauth_refresh_lock_at = null
+        where id = 1 and oauth_refresh_token = ${oldRefresh}
+        returning oauth_refresh_token
+      `;
+      if (!written.length) {
+        const current = await readGrantRow(sql);
+        if (current.access && (current.expiresAt === 0 || current.expiresAt > Date.now())) {
+          adoptGrant(settings, current);
+          return current.access;
+        }
+      }
+      settings.accessToken = parsed.access_token;
+      settings.oauthRefreshToken = nextRefresh;
+      settings.accessTokenExpiresAt = expiresAt;
+      oauthCache.__zendeskOauth = { key: `grant:${nextRefresh.slice(0, 24)}`, token: parsed.access_token, expiresAt };
+      return parsed.access_token;
+    }
+    throw new Error(`Zendesk refused the admin grant. ${lastDetail}`);
+  } finally {
+    await sql`update integration_settings set oauth_refresh_lock_at = null where id = 1 and oauth_refresh_lock_at is not null`.catch(() => undefined);
+  }
 }
 
 async function clearStaleGrant(settings: ZSettings) {
   settings.oauthRefreshToken = "";
   settings.accessToken = "";
+  settings.accessTokenExpiresAt = 0;
   try {
     const { getSql } = await import("@/lib/db");
     const sql = await getSql();
-    await sql`update integration_settings set oauth_refresh_token = '', oauth_access_token = '' where id = 1`;
+    await sql`update integration_settings set oauth_refresh_token = '', oauth_access_token = '', oauth_access_expires_at = null, oauth_refresh_lock_at = null where id = 1`;
   } catch {
     /* the client-credentials grant can still be used */
   }
 }
 
-async function zendeskAccessToken(settings: ZSettings) {
-  if (settings.accessToken) return settings.accessToken;
-  if (settings.oauthClientId && settings.oauthClientSecret) {
-    try {
-      return await requestClientToken(settings);
-    } catch (error) {
-      if (!settings.oauthRefreshToken) throw error;
-    }
-  }
+async function zendeskAccessToken(settings: ZSettings, force = false) {
+  const expired = settings.accessTokenExpiresAt > 0 && settings.accessTokenExpiresAt <= Date.now() + 60_000;
+  if (!force && settings.accessToken && !expired) return settings.accessToken;
   if (settings.oauthRefreshToken) {
     try {
-      return await refreshGrantedToken(settings);
+      return await refreshGrantedToken(settings, force);
     } catch (error) {
       const message = error instanceof Error ? error.message : "";
-      if (!/invalid_client|refused the admin grant/i.test(message)) throw error;
-      await clearStaleGrant(settings);
+      if (/invalid_client|invalid_grant/i.test(message)) {
+        await clearStaleGrant(settings);
+      } else if (!settings.oauthClientSecret || !/already refreshing/i.test(message)) {
+        throw error;
+      }
     }
   }
-  if (settings.oauthClientId && settings.oauthClientSecret) return requestClientToken(settings);
+  if (settings.oauthClientId && settings.oauthClientSecret) return requestClientToken(settings, force);
+  if (settings.accessToken) return settings.accessToken;
   throw new Error("Zendesk has no admin grant. Open Connect Zendesk admin while signed in as the account owner.");
 }
 
-async function requestClientToken(settings: ZSettings) {
+async function requestClientToken(settings: ZSettings, force = false) {
   if (!settings.oauthClientId || !settings.oauthClientSecret) {
     throw new Error("Zendesk has no admin grant. Open Connect Zendesk admin while signed in as the account owner.");
   }
   const key = `client:${settings.oauthClientId}`;
   const cached = oauthCache.__zendeskOauth;
-  if (cached && cached.key === key && cached.expiresAt > Date.now() + 15_000) return cached.token;
-  const host = settings.subdomain || "managetechservices-16737";
+  if (!force && cached && cached.key === key && cached.expiresAt > Date.now() + 15_000) return cached.token;
   const secrets = await oauthSecrets(settings);
   let lastDetail = "Zendesk refused the client.";
   for (const secret of secrets) {
-    const response = await fetch(`https://${host}.zendesk.com/oauth/tokens`, {
+    const response = await fetch(tokenEndpoint(settings), {
       method: "POST",
       headers: { Accept: "application/json", "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -914,30 +1016,31 @@ async function requestClientToken(settings: ZSettings) {
     }
     const parsed = JSON.parse(text) as { access_token?: string; expires_in?: number };
     if (!parsed.access_token) continue;
-    settings.accessToken = parsed.access_token;
     const ttl = typeof parsed.expires_in === "number" && parsed.expires_in > 60 ? parsed.expires_in * 1000 : 25 * 60 * 1000;
-    oauthCache.__zendeskOauth = { key, token: parsed.access_token, expiresAt: Date.now() + ttl };
+    settings.accessToken = parsed.access_token;
+    settings.accessTokenExpiresAt = Date.now() + ttl;
+    oauthCache.__zendeskOauth = { key, token: parsed.access_token, expiresAt: settings.accessTokenExpiresAt };
     return parsed.access_token;
   }
   throw new Error(`Zendesk refused the client credentials grant. ${lastDetail}`);
 }
 
-async function zendeskAuthorization(settings: ZSettings, bearerOnly = false) {
+async function zendeskAuthorization(settings: ZSettings, bearerOnly = false, force = false) {
   if (!bearerOnly && settings.email && settings.apiToken) return `Basic ${basicAuth(settings.email, settings.apiToken)}`;
   if (settings.accessToken || settings.oauthRefreshToken || (settings.oauthClientId && settings.oauthClientSecret)) {
-    return `Bearer ${await zendeskAccessToken(settings)}`;
+    return `Bearer ${await zendeskAccessToken(settings, force)}`;
   }
   throw new Error("Zendesk has no admin grant. Open Connect Zendesk admin while signed in as the account owner.");
 }
 
 async function zendesk(settings: ZSettings, path: string, init?: RequestInit) {
-  const host = settings.subdomain || "managetechservices-16737";
+  const host = settings.subdomain || "managetechservicehelp";
   const url = path.startsWith("http") ? path : `https://${host}.zendesk.com/api/v2${path}`;
-  const run = async (bearerOnly = false) =>
+  const run = async (bearerOnly = false, force = false) =>
     fetch(url, {
       ...init,
       headers: {
-        Authorization: await zendeskAuthorization(settings, bearerOnly),
+        Authorization: await zendeskAuthorization(settings, bearerOnly, force),
         Accept: "application/json",
         "Content-Type": "application/json",
         ...(init?.headers ?? {}),
@@ -945,9 +1048,12 @@ async function zendesk(settings: ZSettings, path: string, init?: RequestInit) {
     });
   let response = await run();
   if (response.status === 401) {
+    // The cached/stored token is dead. Force a refresh (the refresh token is
+    // single-use) and retry once.
     oauthCache.__zendeskOauth = undefined;
     settings.accessToken = "";
-    response = await run(true);
+    settings.accessTokenExpiresAt = 0;
+    response = await run(true, true);
   }
   if (response.status === 429) {
     const wait = Math.min(Number(response.headers.get("retry-after") || "2") || 2, 8);
@@ -969,12 +1075,12 @@ async function zendesk(settings: ZSettings, path: string, init?: RequestInit) {
       /* keep the raw snippet */
     }
     if (response.status === 401 && /couldn't authenticate you/i.test(detail)) {
-      detail = "That value is not a Zendesk API token. The OAuth client signs in as emilalvaroserrano@gmail.com, an end user, so it cannot act as an agent.";
+      detail = "Zendesk rejected that credential. Check the OAuth client id and secret, or reconnect the admin grant.";
     }
     if (response.status === 403) {
       detail = settings.oauthRefreshToken
-        ? "Zendesk refused this admin grant."
-        : "Zendesk is signed in as an end user. Open /api/zendesk/oauth/start while signed in to Zendesk as admin@abitech.site.";
+        ? "Zendesk refused this admin grant. The Zendesk user must be an admin with access to tickets and users."
+        : "Zendesk is signed in as an end user. Open /api/zendesk/oauth/start while signed in to Zendesk as yossi@managetechservice.com.";
     }
     if (/missing the following required scopes/i.test(detail)) {
       detail = "Zendesk refused the write. The connected client needs tickets:write and write, or use an API token that can edit tickets.";
@@ -1061,7 +1167,7 @@ async function logOrderMail(sql: Sql, orderId: number | undefined, message: stri
 
 async function uploadInvoicePdf(settings: ZSettings, filename: string, bytes: Uint8Array) {
   const token = await zendeskAccessToken(settings);
-  const host = settings.subdomain || "managetechservices-16737";
+  const host = settings.subdomain || "managetechservicehelp";
   const safeName = filename.replace(/[^\w.-]+/g, "-") || "invoice.pdf";
   const form = new FormData();
   form.append("file", new Blob([new Uint8Array(bytes)], { type: "application/pdf" }), safeName);
@@ -4671,6 +4777,11 @@ export const getIntegration = createServerFn({ method: "GET" })
       oauthClientId: live.oauthClientId,
       oauthFromEnv: Boolean(envZendesk().oauthClientId && envZendesk().oauthClientSecret),
       oauthSecretSet: Boolean(live.oauthClientSecret),
+      oauthGrant: Boolean(s(row, "oauth_refresh_token")),
+      oauthScopes: s(row, "oauth_scopes") || "read write",
+      tokenExpiresAt: live.accessTokenExpiresAt > 0 ? new Date(live.accessTokenExpiresAt).toISOString() : null,
+      tokenExpiresInSeconds: live.accessTokenExpiresAt > 0 ? Math.max(0, Math.round((live.accessTokenExpiresAt - Date.now()) / 1000)) : null,
+      refreshLocked: expiryMs(row.oauth_refresh_lock_at) > Date.now(),
       orgs: orgs.map(mapOrg),
       mtsAuth: await mtsAuthPublic(),
     };
@@ -4742,19 +4853,46 @@ export const testIntegration = createServerFn({ method: "POST" })
       }
     }
     try {
+      if (settings.oauthRefreshToken) {
+        // Prove the stored authorization-code grant end to end: rotate the
+        // refresh token, then resolve the identity the token actually acts as.
+        const token = await zendeskAccessToken(settings, true);
+        const me = await zendesk(settings, "/users/me.json");
+        const user = obj(me.user);
+        const who = typeof user.email === "string" ? user.email : settings.email;
+        const role = typeof user.role === "string" ? user.role : "agent";
+        await rememberZendesk(sql, "connected", "", false);
+        await audit(sql, actor, "Tested Zendesk", settings.subdomain, `${who || "admin"} · ${role} · refreshed grant`);
+        return {
+          ok: true,
+          name: `${who || settings.subdomain} · ${role}`,
+          grant: "authorization_code" as const,
+          role,
+          tokenExpiresInSeconds: settings.accessTokenExpiresAt > 0 ? Math.max(0, Math.round((settings.accessTokenExpiresAt - Date.now()) / 1000)) : null,
+          tokenLength: token.length,
+        };
+      }
       if (clientCredentialsReady(settings)) {
         try {
           await zendesk(settings, "/users.json?per_page=1");
+          const who = await zendeskIdentity(settings).catch(() => null);
           await rememberZendesk(sql, "connected", "", false);
-          await audit(sql, actor, "Tested Zendesk", settings.subdomain, "OAuth client credentials");
-          return { ok: true, name: `${settings.subdomain} OAuth` };
+          await audit(sql, actor, "Tested Zendesk", settings.subdomain, `${who?.email || "OAuth"} · client credentials`);
+          return {
+            ok: true,
+            name: who?.email ? `${who.email} · ${who.role || "agent"}` : `${settings.subdomain} OAuth`,
+            grant: "client_credentials" as const,
+            role: who?.role || "",
+            tokenExpiresInSeconds: settings.accessTokenExpiresAt > 0 ? Math.max(0, Math.round((settings.accessTokenExpiresAt - Date.now()) / 1000)) : null,
+            tokenLength: settings.accessToken.length,
+          };
         } catch (error) {
           const message = error instanceof Error ? error.message : "";
           if (!/returned 403/.test(message)) throw error;
           const who = await zendeskIdentity(settings);
-          await rememberZendesk(sql, "limited", "Connected as an end user. Add an admin API token for company-wide tickets and people.", false);
+          await rememberZendesk(sql, "limited", "Connected as an end user. Connect the admin grant for company-wide tickets and people.", false);
           await audit(sql, actor, "Tested Zendesk", settings.subdomain, who.email || "end user");
-          return { ok: true, name: who.email ? `${who.email} · end user` : `${settings.subdomain} · end user` };
+          return { ok: true, name: who.email ? `${who.email} · end user` : `${settings.subdomain} · end user`, grant: "client_credentials" as const, role: "end-user", tokenExpiresInSeconds: null, tokenLength: 0 };
         }
       }
       const me = await zendesk(settings, "/users/me.json");
@@ -4762,7 +4900,7 @@ export const testIntegration = createServerFn({ method: "POST" })
       const name = typeof user.name === "string" ? user.name : settings.email;
       await rememberZendesk(sql, "connected", "", false);
       await audit(sql, actor, "Tested Zendesk", settings.subdomain, name);
-      return { ok: true, name };
+      return { ok: true, name, grant: "api_token" as const, role: typeof user.role === "string" ? user.role : "", tokenExpiresInSeconds: null, tokenLength: 0 };
     } catch (error) {
       const message = error instanceof Error ? error.message : "Connection failed.";
       await rememberZendesk(sql, "error", message, false);

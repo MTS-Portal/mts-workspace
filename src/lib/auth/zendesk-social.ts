@@ -2,7 +2,7 @@ import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypt
 import { auth, authSigningSecret } from "./server";
 import { PUBLIC_APP_ORIGIN } from "./public-origin";
 
-const HOST = "https://managetechservices-16737.zendesk.com";
+const HOST = "https://managetechservicehelp.zendesk.com";
 const SIGN_IN_PATH = "/production/signin";
 const PORTAL_PATH = "/production/user-portal";
 

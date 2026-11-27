@@ -221,7 +221,7 @@ const zendeskOAuthConfig = zendeskReady
         clientSecret: zendeskClientSecret as string,
         authorizationUrl: `https://${zendeskSubdomain}.zendesk.com/oauth/authorizations/new`,
         tokenUrl: `https://${zendeskSubdomain}.zendesk.com/oauth/tokens`,
-        scopes: ["read"],
+        scopes: ["read", "write"],
         authentication: "post" as const,
         overrideUserInfo: true,
         getUserInfo: async (tokens: { accessToken?: string }) => {

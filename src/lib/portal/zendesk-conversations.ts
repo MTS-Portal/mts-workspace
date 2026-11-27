@@ -52,8 +52,8 @@ export function conversationsConfig(): ConversationsConfig {
 }
 
 function conversationsOrigin() {
-  const raw = env("ZENDESK_SUBDOMAIN") || "managetechservices-16737";
-  const host = raw.replace(/^https?:\/\//i, "").replace(/\.zendesk\.com.*$/i, "").split("/")[0] || "managetechservices-16737";
+  const raw = env("ZENDESK_SUBDOMAIN") || "managetechservicehelp";
+  const host = raw.replace(/^https?:\/\//i, "").replace(/\.zendesk\.com.*$/i, "").split("/")[0] || "managetechservicehelp";
   return `https://${host}.zendesk.com`;
 }
 

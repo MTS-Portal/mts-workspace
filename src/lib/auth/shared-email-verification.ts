@@ -12,7 +12,7 @@ export function sharedEmailToken(pathname: string) {
 }
 
 export async function verifySharedEmail(token: string) {
-  const host = (process.env.ZENDESK_SUBDOMAIN || "managetechservices-16737").replace(/[^a-z0-9-]/gi, "") || "managetechservices-16737";
+  const host = (process.env.ZENDESK_SUBDOMAIN || "managetechservicehelp").replace(/[^a-z0-9-]/gi, "") || "managetechservicehelp";
   const response = await fetch(`https://${host}.zendesk.com/verification/shared_email/${encodeURIComponent(token)}`, {
     redirect: "manual",
     headers: { Accept: "text/html" },

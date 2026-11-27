@@ -14,7 +14,7 @@ if (!databaseUrl) throw new Error("DATABASE_URL is not set.");
 const pool = new pg.Pool({ connectionString: databaseUrl, ssl: { rejectUnauthorized: false } });
 
 async function token() {
-  const response = await fetch("https://mts-portal.zendesk.com/oauth/tokens", {
+  const response = await fetch("https://managetechservicehelp.zendesk.com/oauth/tokens", {
     method: "POST",
     headers: { Accept: "application/json", "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -32,7 +32,7 @@ async function token() {
 const access = await token();
 
 async function zendesk(path) {
-  const url = path.startsWith("http") ? path : `https://mts-portal.zendesk.com/api/v2${path}`;
+  const url = path.startsWith("http") ? path : `https://managetechservicehelp.zendesk.com/api/v2${path}`;
   const response = await fetch(url, { headers: { Authorization: `Bearer ${access}`, Accept: "application/json" } });
   const text = await response.text();
   if (!response.ok) throw new Error(`${response.status} ${text.slice(0, 180)}`);

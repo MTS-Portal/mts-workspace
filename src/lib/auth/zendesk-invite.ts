@@ -2,11 +2,11 @@ type ZendeskInvite = { email: string; name: string; id: string };
 
 export type ZendeskDesk = { subdomain: string; authorization: string };
 
-const subdomain = process.env.ZENDESK_SUBDOMAIN?.trim() || "managetechservices-16737";
+const subdomain = process.env.ZENDESK_SUBDOMAIN?.trim() || "managetechservicehelp";
 
 function cleanHost(value: string) {
   const host = value.trim().replace(/^https?:\/\//i, "").replace(/\.zendesk\.com.*$/i, "").replace(/\/.*$/, "");
-  if (!host || host === "mts-portal" || host === "shop") return "managetechservices-16737";
+  if (!host || host === "mts-portal" || host === "shop") return "managetechservicehelp";
   return host;
 }
 
@@ -37,7 +37,7 @@ export async function zendeskDesk(): Promise<ZendeskDesk | null> {
 }
 
 async function zendeskToken() {
-  const host = "managetechservices-16737";
+  const host = "managetechservicehelp";
   const secrets = [process.env.ZENDESK_OAUTH_CLIENT_SECRET?.trim() || ""];
   try {
     const { getSql } = await import("@/lib/db");

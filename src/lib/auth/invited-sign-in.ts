@@ -92,7 +92,7 @@ async function ensureZendeskEndUser(name: string, email: string) {
   try {
     const { zendeskSupportToken } = await import("./zendesk-invite");
     const token = await zendeskSupportToken();
-    await fetch("https://managetechservices-16737.zendesk.com/api/v2/users.json", {
+    await fetch("https://managetechservicehelp.zendesk.com/api/v2/users.json", {
       method: "POST",
       headers: { Accept: "application/json", Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       body: JSON.stringify({ user: { name, email, role: "end-user", verified: true } }),

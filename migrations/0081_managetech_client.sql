@@ -1,5 +1,5 @@
 update integration_settings
 set oauth_client_id = 'managetech',
-    subdomain = 'managetechservices-16737',
-    email = 'admin@abitech.site'
+    subdomain = 'managetechservicehelp',
+    email = 'yossi@managetechservice.com'
 where id = 1;

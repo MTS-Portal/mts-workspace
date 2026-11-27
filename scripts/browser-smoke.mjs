@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-import { mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
+import { dirname, join, sep } from "node:path";
+import { tmpdir } from "node:os";
 import { chromium } from "playwright";
 import { checkedOutputPath, checkedUrl } from "./browser-guard.mjs";
 import { computeBrandWarnings } from "./brand-check.mjs";
@@ -27,10 +28,20 @@ if (args.error) {
 }
 
 const url = checkedUrl(args.url);
-const outPng = checkedOutputPath(args.outPng, ["/workspace"]);
+// Screenshots/verdict output. Historically hardcoded to /workspace; now
+// default to BROWSER_SMOKE_OUT_DIR, /workspace when it exists, else a temp
+// dir, so the smoke test runs on any machine. /workspace stays allowed.
+const WS = "/workspace";
+const SMOKE_ROOT = process.env.BROWSER_SMOKE_OUT_DIR || (existsSync(WS) ? WS : join(tmpdir(), "mtp-smoke"));
+const allowedRoots = [SMOKE_ROOT, WS];
+let outPngArg = args.outPng;
+if (!existsSync(WS) && typeof outPngArg === "string" && (outPngArg === WS || outPngArg.startsWith(WS + sep))) {
+  outPngArg = join(SMOKE_ROOT, outPngArg.slice(WS.length).replace(/^[/\\]+/, ""));
+}
+const outPng = checkedOutputPath(outPngArg, allowedRoots);
 const derived = derivedPaths(outPng);
-const mobilePng = checkedOutputPath(derived.mobilePng, ["/workspace"]);
-const outJson = checkedOutputPath(derived.verdictJson, ["/workspace"], "verdict JSON");
+const mobilePng = checkedOutputPath(derived.mobilePng, allowedRoots);
+const outJson = checkedOutputPath(derived.verdictJson, allowedRoots, "verdict JSON");
 
 const MAX_BASELINE_BYTES = 1024 * 1024;
 const baselineRequested = Boolean(args.baseline);
@@ -38,7 +49,7 @@ let baselinePath = null;
 let baselineResolveError = null;
 if (baselineRequested) {
   try {
-    baselinePath = checkedOutputPath(realpathSync(args.baseline), ["/workspace"], "baseline");
+    baselinePath = checkedOutputPath(realpathSync(args.baseline), allowedRoots, "baseline");
   } catch (err) {
     baselineResolveError = err?.code ?? "unresolvable path";
   }
