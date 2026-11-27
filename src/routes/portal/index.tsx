@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useRouterState } from "@tanstack/react-router";
+import { ArrowRight, Plus } from "lucide-react";
 import type { ReactNode } from "react";
 import { usePortalSession } from "@/lib/portal/use-portal-session";
 import { usePortalWorkspace } from "@/lib/portal/use-portal-workspace";
@@ -30,6 +31,8 @@ export function PortalHome() {
   const token = useShopToken();
   const session = usePortalSession();
   const { workspace, ready } = usePortalWorkspace();
+  const path = useRouterState({ select: (state) => state.location.pathname });
+  const base = path.startsWith("/production/user-portal") ? "/production/user-portal" : "/portal";
   const widgets = workspace.widgets;
   const has = (ids: Set<string>) => widgets.some((item) => ids.has(item.id));
   // Only fetch what an enabled, authorized widget will show.
@@ -69,6 +72,22 @@ export function PortalHome() {
           </section>
         );
       }
+      case "new-ticket":
+        return (
+          <Link
+            to={`${base}/tickets/new` as "/portal/tickets/new"}
+            className="group flex items-center gap-4 rounded-2xl bg-ink px-5 py-5 text-white shadow-[0_12px_32px_rgba(0,57,112,0.18)] transition hover:opacity-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:px-6 sm:py-6"
+          >
+            <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-white/15 sm:size-14">
+              <Plus className="size-7" aria-hidden="true" />
+            </span>
+            <span className="grid min-w-0 flex-1 gap-0.5">
+              <span className="text-lg font-semibold sm:text-xl">Submit a new ticket</span>
+              <span className="text-sm text-white/75">Tell us what you need and our team will get back to you.</span>
+            </span>
+            <ArrowRight className="size-6 shrink-0 transition group-hover:translate-x-1" aria-hidden="true" />
+          </Link>
+        );
       case "open-tickets":
         return <StatTile label="Open tickets" value={tickets.filter((ticket) => ticket.status !== "solved" && ticket.status !== "closed").length} />;
       case "active-services":

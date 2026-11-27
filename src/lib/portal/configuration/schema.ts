@@ -155,7 +155,22 @@ function normalizeRole(input: z.infer<typeof roleConfig> | undefined, role: Port
     const base = fallback.widgets.find((item) => item.id === def.id);
     widgets.push({ id: def.id, enabled: raw.enabled ?? base?.enabled ?? def.defaultOn, size });
   }
-  for (const base of fallback.widgets) if (!seenWidgets.has(base.id)) widgets.push(base);
+  // Widgets added to the registry after this config was saved: insert right after the nearest
+  // registry predecessor the config already has (top of the page if none), so a new header-area
+  // widget does not land at the bottom. Saved widgets keep their order.
+  fallback.widgets.forEach((base, index) => {
+    if (seenWidgets.has(base.id)) return;
+    let at = 0;
+    for (let prev = index - 1; prev >= 0; prev -= 1) {
+      const found = widgets.findIndex((item) => item.id === fallback.widgets[prev]!.id);
+      if (found >= 0) {
+        at = found + 1;
+        break;
+      }
+    }
+    widgets.splice(at, 0, base);
+    seenWidgets.add(base.id);
+  });
 
   const landing = modules.find((item) => item.id === input.landing && item.enabled) ? (input.landing as string) : "home";
   const families = { ...fallback.ai.families };
