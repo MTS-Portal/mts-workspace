@@ -1,5 +1,5 @@
 export const MTS_AUTH_CLIENT = "managetech";
-export const MTS_AUTH_ORIGIN = "https://managetech.cloudgpu.site";
+export const MTS_AUTH_ORIGIN = "https://portal.managetechservice.com";
 
 export function oauthUrls(origin = MTS_AUTH_ORIGIN) {
   const base = origin.replace(/\/$/, "");

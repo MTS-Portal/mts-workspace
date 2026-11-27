@@ -46,7 +46,7 @@ these in a file you create):
 | `VITE_AUTH_ENABLED` | client | `"false"` in the shipped `.grok/app-env.json` (dev user); drop the key to turn sign-in ON. Only client-visible auth flag |
 | `BETTER_AUTH_URL` | server | app's own public origin; unset in preview (origin is derived per-request) |
 | `BETTER_AUTH_SECRET` | server | signs this app's own sessions (process-stable fallback in preview; survives HMR) |
-| `GROK_AUTH_ISSUER` | server | the shared broker (defaults to `https://managetech.cloudgpu.site`) |
+| `GROK_AUTH_ISSUER` | server | the shared broker (defaults to `https://portal.managetechservice.com`) |
 | `GROK_AUTH_CLIENT_ID` / `GROK_AUTH_CLIENT_SECRET` | server | per-app client (falls back to the preview client) |
 | `DATABASE_URL` | server | when deployed, Better Auth persists here (preview persists to the embedded PGLite — same DB as app data) |
 

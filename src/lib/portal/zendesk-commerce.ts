@@ -186,7 +186,7 @@ async function orderItemsText(sql: Sql, orderId: number) {
 
 function publicImage(image: string) {
   if (/^https?:\/\//i.test(image)) return image.slice(0, 4000);
-  if (image.startsWith("/")) return `https://managetech.cloudgpu.site${image}`.slice(0, 4000);
+  if (image.startsWith("/")) return `https://portal.managetechservice.com${image}`.slice(0, 4000);
   return "";
 }
 

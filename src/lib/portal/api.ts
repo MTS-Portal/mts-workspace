@@ -3519,7 +3519,7 @@ async function mailOrder(sql: Sql, orderId: number, template: string) {
       to,
       template,
       subject: `${number} payment is still open`,
-      body: `${number} is still unpaid. Pay from https://managetech.cloudgpu.site/production/user-portal/billing.`,
+      body: `${number} is still unpaid. Pay from https://portal.managetechservice.com/production/user-portal/billing.`,
     });
     return;
   }
