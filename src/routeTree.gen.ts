@@ -84,6 +84,7 @@ import { Route as PortalTicketsNewRouteImport } from './routes/portal/tickets/ne
 import { Route as ProductionAdminPortalIndexRouteImport } from './routes/production/admin-portal/index'
 import { Route as ProductionAdminPortalAccessRouteImport } from './routes/production/admin-portal/access'
 import { Route as ProductionAdminPortalAgentRouteImport } from './routes/production/admin-portal/agent'
+import { Route as ProductionAdminPortalCalendarRouteImport } from './routes/production/admin-portal/calendar'
 import { Route as ProductionAdminPortalCampaignsRouteImport } from './routes/production/admin-portal/campaigns'
 import { Route as ProductionAdminPortalDocsRouteImport } from './routes/production/admin-portal/docs'
 import { Route as ProductionAdminPortalFormsRouteImport } from './routes/production/admin-portal/forms'
@@ -512,6 +513,12 @@ const ProductionAdminPortalAgentRoute =
     path: '/agent',
     getParentRoute: () => ProductionAdminPortalRoute,
   } as any)
+const ProductionAdminPortalCalendarRoute =
+  ProductionAdminPortalCalendarRouteImport.update({
+    id: '/calendar',
+    path: '/calendar',
+    getParentRoute: () => ProductionAdminPortalRoute,
+  } as any)
 const ProductionAdminPortalCampaignsRoute =
   ProductionAdminPortalCampaignsRouteImport.update({
     id: '/campaigns',
@@ -866,6 +873,7 @@ export interface FileRoutesByFullPath {
   '/portal/tickets/new': typeof PortalTicketsNewRoute
   '/production/admin-portal/access': typeof ProductionAdminPortalAccessRoute
   '/production/admin-portal/agent': typeof ProductionAdminPortalAgentRoute
+  '/production/admin-portal/calendar': typeof ProductionAdminPortalCalendarRoute
   '/production/admin-portal/campaigns': typeof ProductionAdminPortalCampaignsRoute
   '/production/admin-portal/docs': typeof ProductionAdminPortalDocsRoute
   '/production/admin-portal/forms': typeof ProductionAdminPortalFormsRoute
@@ -988,6 +996,7 @@ export interface FileRoutesByTo {
   '/portal/tickets/new': typeof PortalTicketsNewRoute
   '/production/admin-portal/access': typeof ProductionAdminPortalAccessRoute
   '/production/admin-portal/agent': typeof ProductionAdminPortalAgentRoute
+  '/production/admin-portal/calendar': typeof ProductionAdminPortalCalendarRoute
   '/production/admin-portal/campaigns': typeof ProductionAdminPortalCampaignsRoute
   '/production/admin-portal/docs': typeof ProductionAdminPortalDocsRoute
   '/production/admin-portal/forms': typeof ProductionAdminPortalFormsRoute
@@ -1115,6 +1124,7 @@ export interface FileRoutesById {
   '/portal/tickets/new': typeof PortalTicketsNewRoute
   '/production/admin-portal/access': typeof ProductionAdminPortalAccessRoute
   '/production/admin-portal/agent': typeof ProductionAdminPortalAgentRoute
+  '/production/admin-portal/calendar': typeof ProductionAdminPortalCalendarRoute
   '/production/admin-portal/campaigns': typeof ProductionAdminPortalCampaignsRoute
   '/production/admin-portal/docs': typeof ProductionAdminPortalDocsRoute
   '/production/admin-portal/forms': typeof ProductionAdminPortalFormsRoute
@@ -1242,6 +1252,7 @@ export interface FileRouteTypes {
     | '/portal/tickets/new'
     | '/production/admin-portal/access'
     | '/production/admin-portal/agent'
+    | '/production/admin-portal/calendar'
     | '/production/admin-portal/campaigns'
     | '/production/admin-portal/docs'
     | '/production/admin-portal/forms'
@@ -1364,6 +1375,7 @@ export interface FileRouteTypes {
     | '/portal/tickets/new'
     | '/production/admin-portal/access'
     | '/production/admin-portal/agent'
+    | '/production/admin-portal/calendar'
     | '/production/admin-portal/campaigns'
     | '/production/admin-portal/docs'
     | '/production/admin-portal/forms'
@@ -1490,6 +1502,7 @@ export interface FileRouteTypes {
     | '/portal/tickets/new'
     | '/production/admin-portal/access'
     | '/production/admin-portal/agent'
+    | '/production/admin-portal/calendar'
     | '/production/admin-portal/campaigns'
     | '/production/admin-portal/docs'
     | '/production/admin-portal/forms'
@@ -2113,6 +2126,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProductionAdminPortalAgentRouteImport
       parentRoute: typeof ProductionAdminPortalRoute
     }
+    '/production/admin-portal/calendar': {
+      id: '/production/admin-portal/calendar'
+      path: '/calendar'
+      fullPath: '/production/admin-portal/calendar'
+      preLoaderRoute: typeof ProductionAdminPortalCalendarRouteImport
+      parentRoute: typeof ProductionAdminPortalRoute
+    }
     '/production/admin-portal/campaigns': {
       id: '/production/admin-portal/campaigns'
       path: '/campaigns'
@@ -2573,6 +2593,7 @@ const PortalRouteWithChildren =
 interface ProductionAdminPortalRouteChildren {
   ProductionAdminPortalAccessRoute: typeof ProductionAdminPortalAccessRoute
   ProductionAdminPortalAgentRoute: typeof ProductionAdminPortalAgentRoute
+  ProductionAdminPortalCalendarRoute: typeof ProductionAdminPortalCalendarRoute
   ProductionAdminPortalCampaignsRoute: typeof ProductionAdminPortalCampaignsRoute
   ProductionAdminPortalDocsRoute: typeof ProductionAdminPortalDocsRoute
   ProductionAdminPortalFormsRoute: typeof ProductionAdminPortalFormsRoute
@@ -2599,6 +2620,7 @@ interface ProductionAdminPortalRouteChildren {
 const ProductionAdminPortalRouteChildren: ProductionAdminPortalRouteChildren = {
   ProductionAdminPortalAccessRoute: ProductionAdminPortalAccessRoute,
   ProductionAdminPortalAgentRoute: ProductionAdminPortalAgentRoute,
+  ProductionAdminPortalCalendarRoute: ProductionAdminPortalCalendarRoute,
   ProductionAdminPortalCampaignsRoute: ProductionAdminPortalCampaignsRoute,
   ProductionAdminPortalDocsRoute: ProductionAdminPortalDocsRoute,
   ProductionAdminPortalFormsRoute: ProductionAdminPortalFormsRoute,
