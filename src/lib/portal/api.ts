@@ -723,7 +723,7 @@ function envZendesk(): ZSettings {
   };
 }
 
-async function readZendesk(sql: Sql): Promise<ZSettings> {
+export async function readZendesk(sql: Sql): Promise<ZSettings> {
   const envz = envZendesk();
   const rows = await sql<Row>`select subdomain, email, api_token, oauth_client_id, oauth_client_secret, oauth_scopes, oauth_refresh_token, oauth_access_token, oauth_access_expires_at from integration_settings where id = 1`;
   const row = rows[0];
@@ -1033,7 +1033,7 @@ async function zendeskAuthorization(settings: ZSettings, bearerOnly = false, for
   throw new Error("Zendesk has no admin grant. Open Connect Zendesk admin while signed in as the account owner.");
 }
 
-async function zendesk(settings: ZSettings, path: string, init?: RequestInit) {
+export async function zendesk(settings: ZSettings, path: string, init?: RequestInit) {
   const host = settings.subdomain || "managetechservicehelp";
   const url = path.startsWith("http") ? path : `https://${host}.zendesk.com/api/v2${path}`;
   const run = async (bearerOnly = false, force = false) =>
