@@ -32,7 +32,7 @@ export function zendeskRedirectUri(request: Request) {
 }
 
 function sign(payload: string) {
-  return createHmac("sha256", clientSecret() || "mts-portal").update(payload).digest("base64url");
+  return createHmac("sha256", clientSecret() || "mts-admin-grant").update(payload).digest("base64url");
 }
 
 function challenge(verifier: string) {

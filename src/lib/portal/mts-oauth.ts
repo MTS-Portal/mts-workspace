@@ -50,7 +50,7 @@ export async function handleOauthAuthorize(request: Request) {
   const state = params.get("state") || "";
   const scope = (params.get("scope") || "read write").slice(0, 180);
   const responseType = params.get("response_type") || "code";
-  if (!["managetech", "mts-portal"].includes(clientId) || responseType !== "code") {
+  if (!["managetech"].includes(clientId) || responseType !== "code") {
     return page("Cannot authorize", "<p>This connection has to use the managetech client and the authorization code grant.</p>", 400);
   }
   if (!redirectAllowed(redirectUri)) {
@@ -114,7 +114,7 @@ export async function handleOauthToken(request: Request) {
     clientSecret = clientSecret || split.slice(1).join(":");
   }
   const sql = await getSql();
-  const known = (await client(sql, clientId)) || (["managetech", "mts-portal"].includes(clientId) ? await client(sql, MTS_AUTH_CLIENT) : undefined);
+  const known = (await client(sql, clientId)) || (clientId === "managetech" ? await client(sql, MTS_AUTH_CLIENT) : undefined);
   if (!known || clientSecret !== known.secret) return tokenJson({ error: "invalid_client" }, 401);
   const grant = body.grant_type;
   if (grant === "authorization_code") {

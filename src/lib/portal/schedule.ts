@@ -174,3 +174,29 @@ export const checkConflict = createServerFn({ method: "POST" })
     const available = data.technicians.every((t) => isAvailable(t, data.startsAt, data.endsAt, availability, slots));
     return { conflicts, available };
   });
+
+/**
+ * Phase 12 / user request — remove legacy operational data. ADMIN ONLY +
+ * explicit confirm. Clears ONLY portal-side scheduling artifacts; it does NOT
+ * touch Zendesk tickets/users/organizations, customer `orders`, `portal_staff`,
+ * procurement/invoices, or this account's data. "Old MTS portal" vs "this app"
+ * cannot be distinguished row-by-row without inspecting production; this is not
+ * a production reset and is never auto-run.
+ */
+export const purgeLegacyScheduleData = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .inputValidator((input: { confirm: string }) => input)
+  .handler(async ({ context, data }): Promise<{ cleared: Record<string, number>; note: string }> => {
+    const sql = await getSql();
+    const me = await actor(sql, context.userId);
+    if (me.role !== "owner" && me.role !== "admin") throw new Error("Only owner/admin can clear legacy data.");
+    if (data.confirm !== "CLEAR LEGACY SCHEDULE") throw new Error('Confirm with exactly "CLEAR LEGACY SCHEDULE".');
+    const cleared: Record<string, number> = {};
+    for (const table of ["schedule_assignments", "schedule_events", "field_visits", "technician_availability", "facility_groups"]) {
+      const before = await sql.query<Row>(`select count(*)::int as n from ${table}`).catch(() => [{ n: 0 } as Row]);
+      await sql.query(`delete from ${table}`).catch(() => undefined);
+      cleared[table] = Number((before[0]?.n as number) ?? 0);
+    }
+    await sql`insert into schedule_events (kind, actor, detail) values ('legacy_purge', ${me.name}, ${'admin cleared legacy schedule data'})`.catch(() => undefined);
+    return { cleared, note: "Cleared portal scheduling artifacts only. Zendesk + customer orders + staff + account data untouched." };
+  });
