@@ -15,6 +15,9 @@ export const Route = createFileRoute("/_app/settings")({
 const ROLE_LABEL: Record<Role, string> = {
   owner: "Super Admin",
   admin: "Admin",
+  operations_manager: "Operations Manager",
+  remote_technician: "Remote Technician",
+  onsite_technician: "Onsite Technician",
   agent: "Agent",
   viewer: "Viewer",
 };

@@ -2028,7 +2028,7 @@ export async function resolveDeskRole(sql: Sql, userId: string): Promise<Role | 
   if (row) {
     if (!b(row, "active")) return "";
     const role = s(row, "role");
-    return role === "owner" || role === "admin" || role === "agent" || role === "viewer" ? role : "";
+    return role === "owner" || role === "admin" || role === "operations_manager" || role === "remote_technician" || role === "onsite_technician" || role === "agent" || role === "viewer" ? role : "";
   }
   const any = await sql<Row>`select count(*)::int as n from portal_staff`;
   const empty = (any[0] ? n(any[0], "n") : 0) === 0;

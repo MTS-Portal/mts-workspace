@@ -1,4 +1,11 @@
-export type Role = "owner" | "admin" | "agent" | "viewer";
+export type Role =
+  | "owner"
+  | "admin"
+  | "operations_manager"
+  | "remote_technician"
+  | "onsite_technician"
+  | "agent"
+  | "viewer";
 
 export type Actor = {
   userId: string;

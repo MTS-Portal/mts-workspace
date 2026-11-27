@@ -57,7 +57,7 @@ async function visitorEntitlements(sql: Sql, userId: string): Promise<Entitlemen
 
 export async function workspaceForUser(sql: Sql, userId: string): Promise<Workspace> {
   const desk = await resolveDeskRole(sql, userId);
-  const role: PortalRole = desk || "customer";
+  const role: PortalRole = desk === "operations_manager" || desk === "remote_technician" || desk === "onsite_technician" ? "agent" : (desk || "customer");
   const [config, entitlements] = await Promise.all([publishedPortalConfig(sql), visitorEntitlements(sql, userId)]);
   return resolveWorkspace(config, role, entitlements);
 }
@@ -72,7 +72,7 @@ export async function workspaceForShopRow(sql: Sql, row: Row): Promise<Workspace
   const users = email ? await sql<Row>`select id from "user" where lower(email) = ${email} limit 1` : [];
   const userId = text(users[0], "id");
   const desk = userId ? await resolveDeskRole(sql, userId) : "";
-  const role: PortalRole = desk || "customer";
+  const role: PortalRole = desk === "operations_manager" || desk === "remote_technician" || desk === "onsite_technician" ? "agent" : (desk || "customer");
   const [config, access] = await Promise.all([publishedPortalConfig(sql), accessFor(sql, row)]);
   return resolveWorkspace(config, role, entitlementsFromAccess(access));
 }
