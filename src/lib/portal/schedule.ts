@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql, type Sql } from "@/lib/db";
 import { enqueueJob } from "./commerce";
+import { readZendesk, zendesk } from "./api";
 import { syncSheet } from "./sheets-sync";
 import { canReadOperations, canWriteOperations, isCustomer } from "./roles";
 import {
@@ -199,4 +200,50 @@ export const purgeLegacyScheduleData = createServerFn({ method: "POST" })
     }
     await sql`insert into schedule_events (kind, actor, detail) values ('legacy_purge', ${me.name}, ${'admin cleared legacy schedule data'})`.catch(() => undefined);
     return { cleared, note: "Cleared portal scheduling artifacts only. Zendesk + customer orders + staff + account data untouched." };
+  });
+
+/**
+ * Calendar events sourced from LIVE Zendesk ticket dates + portal scheduling.
+ * Maps `ticket.created_at` (and `due_at`/`updated_at` when present) from
+ * Zendesk onto the calendar, plus `field_visits`. Zendesk is source of truth.
+ * `laDay` = America/Los_Angeles calendar day. Nothing fabricated.
+ */
+export const getCalendarEvents = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }): Promise<ScheduledVisit[]> => {
+    const sql = await getSql();
+    await actor(sql, context.userId);
+    const out: ScheduledVisit[] = [];
+    // portal scheduling
+    out.push(...(await loadSlots(sql)));
+    // live Zendesk ticket dates
+    try {
+      const settings = await readZendesk(sql);
+      const supportConnectedNow = Boolean(settings.oauthClientId && settings.oauthClientSecret) || Boolean(settings.accessToken) || Boolean(settings.email && settings.apiToken);
+      if (supportConnectedNow) {
+        const body = await zendesk(settings, "/tickets.json?page[size]=100&sort_by=created_at&sort_order=desc");
+        const tickets = Array.isArray((body as Row).tickets) ? ((body as Row).tickets as Row[]) : [];
+        for (const t of tickets) {
+          const zdId = t.id != null ? String(t.id) : "";
+          const createdAt = cell(t, "created_at") || cell(t, "updated_at");
+          const assignee = cell(t, "assignee_id"); // raw id; name resolution happens in desk sync
+          const title = cell(t, "subject");
+          const status = (cell(t, "status") || "open");
+          const base = { lane: "help_desk", kind: "ticket", technician: "", technicians: [] as string[], siteAddress: "", progress: "", zendeskId: zdId, timezone: SCHEDULE_TIMEZONE };
+          // created-at event on the calendar
+          if (createdAt) {
+            const day = laDate(createdAt);
+            out.push({ id: `zd-created-${zdId}`, ...base, title: `Opened · ${title}`, status, startsAt: createdAt, endsAt: createdAt, laDay: day, laStart: laTime(createdAt), laEnd: "", } as ScheduledVisit);
+          }
+          // due-at event when Zendesk has one
+          const due = cell(t, "due_at");
+          if (due) { const day = laDate(due); out.push({ id: `zd-due-${zdId}`, ...base, kind: "due", title: `Due · ${title}`, status, startsAt: due, endsAt: due, laDay: day, laStart: laTime(due), laEnd: "", } as ScheduledVisit); }
+          void assignee;
+        }
+      }
+    } catch { /* calendar still shows portal scheduling; never fabricate */ }
+    // de-dupe
+    const seen = new Set<string>(); const merged: ScheduledVisit[] = [];
+    for (const v of out) { const k = String(v.id); if (seen.has(k)) continue; seen.add(k); merged.push(v); }
+    return merged.sort((a, b) => a.startsAt.localeCompare(b.startsAt));
   });

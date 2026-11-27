@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { OperationsDesk } from "@/components/operations-desk";
 import { Panel } from "@/components/ui";
 import { DayAgenda, ScheduleCalendar } from "@/components/schedule-calendar";
-import { getSchedule } from "@/lib/portal/schedule";
+import { getCalendarEvents } from "@/lib/portal/schedule";
 import { laDate } from "@/lib/portal/schedule-rules";
 
 export const Route = createFileRoute("/production/admin-portal/operations")({
@@ -13,10 +13,10 @@ export const Route = createFileRoute("/production/admin-portal/operations")({
 
 /** Operations Desk + integrated responsive Calendar view. */
 function OperationsPage() {
-  const schedule = useQuery({ queryKey: ["schedule"], queryFn: () => getSchedule() });
+  const schedule = useQuery({ queryKey: ["calendar-events"], queryFn: () => getCalendarEvents() });
   const todayLA = laDate(new Date().toISOString());
   const [selectedDay, setSelectedDay] = useState(todayLA);
-  const visits = useMemo(() => schedule.data?.visits ?? [], [schedule.data]);
+  const visits = useMemo(() => schedule.data ?? [], [schedule.data]);
   const dayVisits = useMemo(() => visits.filter((v) => v.laDay === selectedDay).sort((a, b) => a.startsAt.localeCompare(b.startsAt)), [visits, selectedDay]);
 
   return (
