@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
+import { ChevronDown, ChevronUp, Building2, Ticket, User } from "lucide-react";
 import { Button, ErrorNote, Input, Loading, PageHeader, Select, StatusBadge } from "@/components/ui";
 import { getShell, listTickets, updateTicket } from "@/lib/portal/api";
 import { getOperations, saveStep, saveVisit, type OpsLane, type OpsTicket, type OperationsDesk, type Visit } from "@/lib/portal/operations";
@@ -14,6 +15,13 @@ const LANE_COPY: Record<OpsLane, string> = {
   help_desk: "Remote support, onsite calls, and troubleshooting with no equipment order.",
   order: "Purchasing, shipment, delivery, and installation. These stay Zendesk tickets, filed in their own lane.",
   project: "Wi-Fi, wiring, cameras, access control, phone systems, takeovers, and the tasks under them.",
+};
+
+// Lane styling for modern, aligned, color-coded cards.
+const LANE_META: Record<OpsLane, { accent: string; chip: string; ring: string }> = {
+  help_desk: { accent: "bg-blue-500", chip: "bg-blue-50 text-blue-700 border-blue-200", ring: "ring-blue-500" },
+  order: { accent: "bg-amber-500", chip: "bg-amber-50 text-amber-700 border-amber-200", ring: "ring-amber-500" },
+  project: { accent: "bg-violet-500", chip: "bg-violet-50 text-violet-700 border-violet-200", ring: "ring-violet-500" },
 };
 
 const KINDS: Record<OpsLane, string[]> = {
@@ -287,14 +295,34 @@ function TicketCard({
     onSuccess: onSaved,
   });
 
+  const [expanded, setExpanded] = useState(false);
+  const meta = LANE_META[ticket.lane];
+
   return (
-    <article className="grid gap-2 rounded-xl border border-line p-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <StatusBadge value={ticket.status} />
-        <span className="text-xs uppercase text-muted">{ticket.priority}</span>
+    <article className={`group relative grid w-full min-w-0 gap-2 overflow-hidden rounded-xl border border-line bg-white shadow-sm transition ${expanded ? `ring-1 ${meta.ring}` : "hover:border-blue-300 hover:shadow"}`} data-lane={ticket.lane}>
+      <span className={`absolute inset-y-0 left-0 w-1 ${meta.accent}`} aria-hidden />
+      {/* compact, standard-size header (always visible) */}
+      <div className="grid gap-2 p-3 pl-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <StatusBadge value={ticket.status} />
+            <span className="rounded-md border border-line px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wide text-muted">{ticket.priority}</span>
+            <span className={`rounded-md border px-1.5 py-0.5 text-[11px] font-medium ${meta.chip}`}>{LANE_LABEL[ticket.lane]}</span>
+          </div>
+          <button type="button" className="inline-flex h-7 items-center gap-1 rounded-lg border border-line px-2 text-xs font-medium text-ink transition hover:bg-paper focus:outline-none focus:ring-2 focus:ring-blue-500" aria-expanded={expanded} aria-label={expanded ? "Collapse" : "Expand for full view"} title={expanded ? "Collapse" : "Expand for full view"} onClick={() => setExpanded((v) => !v)}>
+            {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />} {expanded ? "Collapse" : "Expand"}
+          </button>
+        </div>
+        <a href={`/tickets/${ticket.id}`} className={`font-semibold leading-5 text-ink hover:text-blue-700 ${expanded ? "" : "line-clamp-2"}`}>{ticket.subject}</a>
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
+          <span className="inline-flex items-center gap-1"><Building2 className="h-3 w-3" /> {ticket.organizationName || "No company"}</span>
+          <span className="inline-flex items-center gap-1"><Ticket className="h-3 w-3" /> {ticket.zendeskId ? `#${ticket.zendeskId}` : `P-${ticket.id}`}</span>
+          <span className="inline-flex items-center gap-1"><User className="h-3 w-3" /> {technician || ticket.assignee || "Unassigned"}</span>
+        </p>
       </div>
-      <a href={`/tickets/${ticket.id}`} className="font-semibold leading-5">{ticket.subject}</a>
-      <p className="text-xs text-muted">{ticket.organizationName || "No company"} · {ticket.zendeskId ? `Zendesk #${ticket.zendeskId}` : `P-${ticket.id}`}</p>
+
+      {expanded ? (
+      <div className="grid gap-2 border-t border-line bg-paper/40 p-3 pl-4">
       <Select value={lane} aria-label="Lane" onChange={(event) => setLane(event.target.value as OpsLane)}>
         <option value="help_desk">Help Desk</option>
         <option value="order">Orders & Deliveries</option>
@@ -349,6 +377,8 @@ function TicketCard({
       {save.isError ? <p className="text-xs text-bad">{save.error instanceof Error ? save.error.message : "Could not schedule that."}</p> : null}
       {warning ? <p className="text-xs text-warn">{warning}</p> : null}
       <Button disabled={save.isPending} onClick={() => save.mutate()}>{save.isPending ? "Saving" : visit ? "Update schedule" : "Schedule"}</Button>
+      </div>
+      ) : null}
     </article>
   );
 }
