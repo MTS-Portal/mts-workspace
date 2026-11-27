@@ -111,6 +111,7 @@ export type WidgetDef = {
 
 export const WIDGETS: readonly WidgetDef[] = [
   { id: "welcome", label: "Welcome header", description: "Greeting with the company name and welcome message.", module: "home", defaultSize: "full", defaultOn: true },
+  { id: "new-ticket", label: "Submit a new ticket", description: "Large button that opens the new-ticket form.", module: "tickets", defaultSize: "full", defaultOn: true },
   { id: "open-tickets", label: "Open tickets", description: "Count of unsolved tickets.", module: "tickets", defaultSize: "sm", defaultOn: true },
   { id: "active-services", label: "Active services", description: "Approved or provisioned service requests.", module: "services", defaultSize: "sm", defaultOn: true },
   { id: "pending-orders", label: "Pending orders", description: "Orders not yet fulfilled or cancelled.", module: "orders", defaultSize: "sm", defaultOn: true },

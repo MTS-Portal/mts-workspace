@@ -128,6 +128,34 @@ test("widgets follow their module: no shop widget without the Order module", () 
   assert.ok(ids.includes("open-tickets"));
 });
 
+test("new-ticket button: on by default for every role, right under the welcome header", () => {
+  for (const role of ["customer", "viewer", "agent", "admin", "owner"] as const) {
+    const ids = resolveWorkspace(defaultPortalConfig(), role, ALL_ENTITLEMENTS).widgets.map((item) => item.id);
+    assert.deepEqual(ids.slice(0, 2), ["welcome", "new-ticket"], role);
+  }
+});
+
+test("new-ticket button follows the Tickets module and the ticket entitlement", () => {
+  const off = normalizePortalConfig({ roles: { customer: { modules: [{ id: "tickets", enabled: false }] } } });
+  assert.ok(!resolveWorkspace(off, "customer", ALL_ENTITLEMENTS).widgets.some((item) => item.id === "new-ticket"));
+  const noTickets = resolveWorkspace(defaultPortalConfig(), "customer", { ...ALL_ENTITLEMENTS, ticket: false });
+  assert.ok(!noTickets.widgets.some((item) => item.id === "new-ticket"));
+});
+
+test("a widget added to the registry after a config was saved goes in after its registry neighbour", () => {
+  // A config saved before "new-ticket" existed, with the welcome header moved below the stats.
+  const saved = defaultPortalConfig().roles.customer.widgets.filter((item) => item.id !== "new-ticket");
+  const welcome = saved.findIndex((item) => item.id === "welcome");
+  const [header] = saved.splice(welcome, 1);
+  saved.splice(2, 0, header!);
+  const config = normalizePortalConfig({ roles: { customer: { widgets: saved } } });
+  const ids = config.roles.customer.widgets.map((item) => item.id);
+  assert.equal(ids[ids.indexOf("welcome") + 1], "new-ticket");
+  assert.equal(ids.length, saved.length + 1);
+  // Everything the admin arranged keeps its relative order.
+  assert.deepEqual(ids.filter((id) => id !== "new-ticket"), saved.map((item) => item.id));
+});
+
 test("garbage input yields the default config", () => {
   assert.deepEqual(normalizePortalConfig("nope"), defaultPortalConfig());
   assert.deepEqual(normalizePortalConfig(null), defaultPortalConfig());
