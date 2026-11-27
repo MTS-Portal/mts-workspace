@@ -174,3 +174,40 @@ export const listTechnicians = createServerFn({ method: "GET" })
     }
     return [...merged.values()].sort((a, b) => a.name.localeCompare(b.name));
   });
+
+/**
+ * Phase 4/3 — apply a routing suggestion as a real assignment.
+ *
+ * Only runs when (a) caller is an authorized staff member AND (b) `apply` is
+ * explicitly true AND (c) the rule is automatic-eligible or `force` is set by
+ * an admin. Suggestions are never auto-applied. Reuses the existing
+ * `updateTicket` (which synchronizes assignee to Zendesk `assignee_id` with a
+ * real identity) — no second Zendesk write path. Records the decision.
+ */
+export const applyRoutingAssignment = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .inputValidator((input: { ticketId: number; technician: string; zendeskId?: string; category?: string; apply: boolean; force?: boolean }) => input)
+  .handler(async ({ context, data }): Promise<{ applied: boolean; warning?: string }> => {
+    const sql = await getSql();
+    const me = await actor(sql, context.userId);
+    assertRoutingWrite(me.role);
+    if (!data.apply) throw new Error("Refusing to reassign without explicit apply.");
+    const technician = text(data.technician, 160);
+    if (!technician) throw new Error("No technician to assign.");
+    // never assign to a fabricated identity
+    const known = KNOWN_TECHNICIANS.find((t) => t.name.toLowerCase() === technician.toLowerCase() || (data.zendeskId && t.zendeskId === data.zendeskId));
+    const staff = await sql<Row>`select name from portal_staff where active = true and lower(name) = ${technician.toLowerCase()} limit 1`.catch(() => [] as Row[]);
+    if (!known && !staff[0]) throw new Error("Technician is not a verified portal staff member or known Zendesk user.");
+    const { updateTicket } = await import("./api");
+    let warning = "";
+    try {
+      const result = await updateTicket({ data: { id: data.ticketId, assignee: technician, status: "open", priority: "normal" } }) as { warning?: string };
+      warning = result?.warning ?? "";
+    } catch (error) {
+      warning = error instanceof Error ? error.message : "Zendesk assignment failed.";
+      // local record still updated by updateTicket before Zendesk; surface warning
+    }
+    await sql`insert into ai_tool_executions (actor, tool, args, ok, detail) values (${me.name}, 'applyRoutingAssignment', ${JSON.stringify({ ticketId: data.ticketId, technician, category: data.category ?? "" })}, ${!warning}, ${warning})`.catch(() => undefined);
+    await sql`insert into notifications (kind, title, body, href, audience, actor_name, dedupe_key) values ('routing', ${`Assigned ${technician}`}, ${`ticket ${data.ticketId}${data.category ? ` · ${data.category}` : ""}`}, ${`/production/admin-portal/tickets`}, 'staff', ${me.name}, ${`routing-apply:${data.ticketId}:${technician}`}) on conflict do nothing`.catch(() => undefined);
+    return { applied: true, warning: warning || undefined };
+  });

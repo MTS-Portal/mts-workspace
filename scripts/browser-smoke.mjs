@@ -34,7 +34,7 @@ const url = checkedUrl(args.url);
 const WS = "/workspace";
 const SMOKE_ROOT = process.env.BROWSER_SMOKE_OUT_DIR || (existsSync(WS) ? WS : join(tmpdir(), "mtp-smoke"));
 const allowedRoots = [SMOKE_ROOT, WS];
-let outPngArg = args.outPng;
+let outPngArg = args.outPng || join(SMOKE_ROOT, "screenshots", "app-builder-preview.png");
 if (!existsSync(WS) && typeof outPngArg === "string" && (outPngArg === WS || outPngArg.startsWith(WS + sep))) {
   outPngArg = join(SMOKE_ROOT, outPngArg.slice(WS.length).replace(/^[/\\]+/, ""));
 }

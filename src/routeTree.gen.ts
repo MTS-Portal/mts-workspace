@@ -28,6 +28,7 @@ import { Route as AppPaymentsRouteImport } from './routes/_app/payments'
 import { Route as AppPortalBuilderRouteImport } from './routes/_app/portal-builder'
 import { Route as AppProductsRouteImport } from './routes/_app/products'
 import { Route as AppRolesRouteImport } from './routes/_app/roles'
+import { Route as AppRoutingRouteImport } from './routes/_app/routing'
 import { Route as AppServicesRouteImport } from './routes/_app/services'
 import { Route as AppSettingsRouteImport } from './routes/_app/settings'
 import { Route as AppUsersRouteImport } from './routes/_app/users'
@@ -223,6 +224,11 @@ const AppProductsRoute = AppProductsRouteImport.update({
 const AppRolesRoute = AppRolesRouteImport.update({
   id: '/roles',
   path: '/roles',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppRoutingRoute = AppRoutingRouteImport.update({
+  id: '/routing',
+  path: '/routing',
   getParentRoute: () => AppRoute,
 } as any)
 const AppServicesRoute = AppServicesRouteImport.update({
@@ -800,6 +806,7 @@ export interface FileRoutesByFullPath {
   '/portal-builder': typeof AppPortalBuilderRoute
   '/products': typeof AppProductsRoute
   '/roles': typeof AppRolesRoute
+  '/routing': typeof AppRoutingRoute
   '/services': typeof AppServicesRoute
   '/settings': typeof AppSettingsRoute
   '/users': typeof AppUsersRoute
@@ -921,6 +928,7 @@ export interface FileRoutesByTo {
   '/portal-builder': typeof AppPortalBuilderRoute
   '/products': typeof AppProductsRoute
   '/roles': typeof AppRolesRoute
+  '/routing': typeof AppRoutingRoute
   '/services': typeof AppServicesRoute
   '/settings': typeof AppSettingsRoute
   '/users': typeof AppUsersRoute
@@ -1043,6 +1051,7 @@ export interface FileRoutesById {
   '/_app/portal-builder': typeof AppPortalBuilderRoute
   '/_app/products': typeof AppProductsRoute
   '/_app/roles': typeof AppRolesRoute
+  '/_app/routing': typeof AppRoutingRoute
   '/_app/services': typeof AppServicesRoute
   '/_app/settings': typeof AppSettingsRoute
   '/_app/users': typeof AppUsersRoute
@@ -1167,6 +1176,7 @@ export interface FileRouteTypes {
     | '/portal-builder'
     | '/products'
     | '/roles'
+    | '/routing'
     | '/services'
     | '/settings'
     | '/users'
@@ -1288,6 +1298,7 @@ export interface FileRouteTypes {
     | '/portal-builder'
     | '/products'
     | '/roles'
+    | '/routing'
     | '/services'
     | '/settings'
     | '/users'
@@ -1409,6 +1420,7 @@ export interface FileRouteTypes {
     | '/_app/portal-builder'
     | '/_app/products'
     | '/_app/roles'
+    | '/_app/routing'
     | '/_app/services'
     | '/_app/settings'
     | '/_app/users'
@@ -1683,6 +1695,13 @@ declare module '@tanstack/react-router' {
       path: '/roles'
       fullPath: '/roles'
       preLoaderRoute: typeof AppRolesRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/routing': {
+      id: '/_app/routing'
+      path: '/routing'
+      fullPath: '/routing'
+      preLoaderRoute: typeof AppRoutingRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/services': {
@@ -2415,6 +2434,7 @@ interface AppRouteChildren {
   AppPortalBuilderRoute: typeof AppPortalBuilderRoute
   AppProductsRoute: typeof AppProductsRoute
   AppRolesRoute: typeof AppRolesRoute
+  AppRoutingRoute: typeof AppRoutingRoute
   AppServicesRoute: typeof AppServicesRoute
   AppSettingsRoute: typeof AppSettingsRoute
   AppUsersRoute: typeof AppUsersRoute
@@ -2441,6 +2461,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppPortalBuilderRoute: AppPortalBuilderRoute,
   AppProductsRoute: AppProductsRoute,
   AppRolesRoute: AppRolesRoute,
+  AppRoutingRoute: AppRoutingRoute,
   AppServicesRoute: AppServicesRoute,
   AppSettingsRoute: AppSettingsRoute,
   AppUsersRoute: AppUsersRoute,
