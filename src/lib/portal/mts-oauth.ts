@@ -15,6 +15,11 @@ function randomToken(bytes = 24) {
   return [...buffer].map((item) => item.toString(16).padStart(2, "0")).join("");
 }
 
+// No hardcoded client secret. `MTS_OAUTH_CLIENT_SECRET` (server env) wins; DB `oauth_clients.secret` is fallback; never committed.
+function envSecret(): string {
+  return (process.env.MTS_OAUTH_CLIENT_SECRET || process.env.MTS_AUTH_CLIENT_SECRET || "").trim();
+}
+
 async function client(sql: Sql, clientId: string) {
   const rows = await sql<Row>`select client_id, name, secret, scopes from oauth_clients where client_id = ${clientId} limit 1`;
   const row = rows[0];
@@ -115,7 +120,8 @@ export async function handleOauthToken(request: Request) {
   }
   const sql = await getSql();
   const known = (await client(sql, clientId)) || (clientId === "managetech" ? await client(sql, MTS_AUTH_CLIENT) : undefined);
-  if (!known || clientSecret !== known.secret) return tokenJson({ error: "invalid_client" }, 401);
+  const expectedSecret = envSecret() || (known?.secret ?? "");
+  if (!known || !expectedSecret || clientSecret !== expectedSecret) return tokenJson({ error: "invalid_client" }, 401);
   const grant = body.grant_type;
   if (grant === "authorization_code") {
     const code = body.code || "";
@@ -178,7 +184,7 @@ export async function mtsAuthPublic() {
   return {
     name: "managetech",
     clientId: MTS_AUTH_CLIENT,
-    secret: known?.secret || "",
+    secret: envSecret() || known?.secret || "",
     grantType: "authorization_code",
     scopes: known?.scopes || "read write",
     authorizeUrl: urls.authorizeUrl,

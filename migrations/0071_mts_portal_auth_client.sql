@@ -12,7 +12,7 @@ insert into oauth_clients (client_id, name, secret, grant_type, scopes)
 values (
   'mts-portal',
   'mts-portal',
-  '7f3c1a9e4b28d6c04a51e8f27b90c3d6a14e5f82c7b09d31e6a4c8f25b17d903',
+  '',
   'authorization_code',
   'read write'
 )

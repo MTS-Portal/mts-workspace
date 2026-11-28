@@ -1,8 +1,14 @@
-export const MTS_AUTH_CLIENT = "managetech";
-export const MTS_AUTH_ORIGIN = "https://portal.managetechservice.com";
+export const MTS_AUTH_CLIENT = process.env.MTS_AUTH_CLIENT_ID?.trim() || "managetech";
 
-export function oauthUrls(origin = MTS_AUTH_ORIGIN) {
-  const base = origin.replace(/\/$/, "");
+// No hardcoded origin. `MTS_AUTH_ORIGIN` wins; default is production; `origin` arg preserved.
+export function mtsAuthOrigin(): string {
+  const env = (process.env.MTS_AUTH_ORIGIN || process.env.PUBLIC_APP_ORIGIN || "").trim().replace(/\/$/, "");
+  return env || "https://portal.managetechservice.com";
+}
+export const MTS_AUTH_ORIGIN = mtsAuthOrigin();
+
+export function oauthUrls(origin?: string) {
+  const base = (origin ?? mtsAuthOrigin()).replace(/\/$/, "");
   return {
     authorizeUrl: `${base}/api/oauth/authorize`,
     tokenUrl: `${base}/api/oauth/token`,
