@@ -240,7 +240,7 @@ export function IntegrationPage() {
               <div><dt className="text-xs text-muted">Name</dt><dd className="font-medium">{data.mtsAuth.name}</dd></div>
               <div><dt className="text-xs text-muted">Grant type</dt><dd>Authorization code</dd></div>
               <div><dt className="text-xs text-muted">Client ID</dt><dd className="font-mono">{data.mtsAuth.clientId}</dd></div>
-              <div><dt className="text-xs text-muted">Client secret</dt><dd className="break-all font-mono text-xs">{data.mtsAuth.secret}</dd></div>
+              <div><dt className="text-xs text-muted">Client secret</dt><dd className="font-medium">{data.mtsAuth.secretSet ? "Set on server (env) — never shown" : "Not set"}</dd></div>
               <div><dt className="text-xs text-muted">Authorize URL</dt><dd className="break-all font-mono text-xs">{data.mtsAuth.authorizeUrl}</dd></div>
               <div><dt className="text-xs text-muted">Token URL</dt><dd className="break-all font-mono text-xs">{data.mtsAuth.tokenUrl}</dd></div>
               <div><dt className="text-xs text-muted">Scopes</dt><dd>{data.mtsAuth.scopes}</dd></div>

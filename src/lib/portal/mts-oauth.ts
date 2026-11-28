@@ -184,7 +184,7 @@ export async function mtsAuthPublic() {
   return {
     name: "managetech",
     clientId: MTS_AUTH_CLIENT,
-    secret: envSecret() || known?.secret || "",
+    secretSet: Boolean(envSecret() || known?.secret),
     grantType: "authorization_code",
     scopes: known?.scopes || "read write",
     authorizeUrl: urls.authorizeUrl,
