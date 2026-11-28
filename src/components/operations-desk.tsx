@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { ChevronDown, ChevronUp, Building2, Ticket, User } from "lucide-react";
+import { ChevronDown, ChevronUp, Building2, Ticket, User, Search, LayoutGrid, List, Filter } from "lucide-react";
 import { Button, ErrorNote, Input, Loading, PageHeader, Select, StatusBadge } from "@/components/ui";
 import { getShell, listTickets, updateTicket } from "@/lib/portal/api";
 import { getOperations, saveStep, saveVisit, type OpsLane, type OpsTicket, type OperationsDesk, type Visit } from "@/lib/portal/operations";
@@ -58,6 +58,11 @@ export function OperationsDesk() {
   const client = useQueryClient();
   const [week, setWeek] = useState("");
   const [mine, setMine] = useState(false);
+  const [tab, setTab] = useState<OpsLane>("help_desk");
+  const [view, setView] = useState<"grid" | "list">("grid");
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [techFilter, setTechFilter] = useState("");
   const shell = useQuery({ queryKey: ["shell"], queryFn: () => getShell() });
   useQuery({
     queryKey: ["ops-sync"],
@@ -115,33 +120,56 @@ export function OperationsDesk() {
           </div>
           <WeekBar weekStart={visible.weekStart} onShift={(days) => setWeek(addDays(visible.weekStart, days))} />
           <WeekGrid days={visible.days} visits={visible.visits} onSaved={() => client.invalidateQueries({ queryKey: ["operations"] })} />
-          <div className="grid gap-4 xl:grid-cols-3">
-            {(["help_desk", "order", "project"] as OpsLane[]).map((lane) => (
-              <section key={lane} className="grid min-w-0 content-start gap-3 rounded-2xl border border-line bg-surface p-4">
-                <div className="grid gap-1">
-                  <div className="flex items-center justify-between gap-2">
-                    <h2 className="text-base font-semibold">{LANE_LABEL[lane]}</h2>
-                    <span className="rounded-full bg-surface-2 px-2 py-0.5 text-xs font-semibold tabular-nums">{visible.lanes[lane].length}</span>
-                  </div>
-                  <p className="text-xs leading-5 text-muted">{LANE_COPY[lane]}</p>
+          {/* 3 tabs + grid/list + search + filters */}
+          {(() => {
+            const LANES = ["help_desk", "order", "project"] as OpsLane[];
+            const active = visible;
+            const base = active.lanes[tab] ?? [];
+            const statuses = [...new Set(LANES.flatMap((l) => active.lanes[l].map((t) => t.status)))].sort();
+            const techs = [...new Set([...active.technicians, ...LANES.flatMap((l) => active.lanes[l].map((t) => t.assignee).filter(Boolean))])].sort();
+            const q = search.trim().toLowerCase();
+            const filtered = base.filter((t) =>
+              (!q || `${t.subject} ${t.organizationName} ${t.assignee} ${t.zendeskId} ${t.category}`.toLowerCase().includes(q)) &&
+              (!statusFilter || t.status === statusFilter) &&
+              (!techFilter || (t.assignee || "").toLowerCase() === techFilter.toLowerCase()));
+            return (
+              <section className="grid min-w-0 content-start gap-3 rounded-2xl border border-line bg-surface p-3 sm:p-4">
+                {/* tab bar */}
+                <div className="inline-flex flex-wrap rounded-lg border border-line bg-paper p-0.5" role="tablist" aria-label="Operations lanes">
+                  {LANES.map((lane) => (
+                    <button key={lane} type="button" role="tab" aria-selected={tab === lane} onClick={() => setTab(lane)}
+                      className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition ${tab === lane ? "bg-white text-ink shadow-sm" : "text-muted hover:text-ink"}`}>
+                      <span className={`h-2 w-2 rounded-full ${LANE_META[lane].accent}`} /> {LANE_LABEL[lane]}
+                      <span className="rounded-full bg-surface-2 px-1.5 py-0.5 text-[11px] tabular-nums">{active.lanes[lane].length}</span>
+                    </button>))}
                 </div>
-                {visible.lanes[lane].length === 0 ? <p className="text-sm text-muted">Nothing open in this lane.</p> : null}
-                {visible.lanes[lane].map((ticket) => (
-                  <TicketCard
-                    key={ticket.id}
-                    ticket={ticket}
-                    technicians={visible.technicians}
-                    steps={visible.steps.filter((step) => step.ticketId === ticket.id)}
-                    visit={visible.visits.find((visit) => visit.ticketId === ticket.id && visit.status !== "done" && visit.status !== "cancelled")}
-                    onSaved={() => {
-                      void client.invalidateQueries({ queryKey: ["operations"] });
-                      void client.invalidateQueries({ queryKey: ["tickets"] });
-                    }}
-                  />
-                ))}
-              </section>
-            ))}
-          </div>
+                <p className="text-xs leading-5 text-muted">{LANE_COPY[tab]}</p>
+                {/* search + filters + grid/list */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="inline-flex min-w-[10rem] flex-1 items-center gap-1 rounded-lg border border-line bg-white px-2 py-1.5 text-xs">
+                    <Search className="h-3.5 w-3.5 text-muted" /><input className="w-full bg-transparent outline-none" placeholder="Search subject, customer, assignee, #" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Search" />
+                  </label>
+                  <label className="inline-flex items-center gap-1 rounded-lg border border-line bg-white px-2 py-1.5 text-[11px] text-muted"><Filter className="h-3.5 w-3.5" /><span>Status</span>
+                    <select className="bg-transparent text-xs text-ink outline-none" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} aria-label="Status"><option value="">All</option>{statuses.map((s) => <option key={s} value={s}>{s}</option>)}</select></label>
+                  <label className="inline-flex items-center gap-1 rounded-lg border border-line bg-white px-2 py-1.5 text-[11px] text-muted"><span>Technician</span>
+                    <select className="max-w-[8rem] bg-transparent text-xs text-ink outline-none" value={techFilter} onChange={(e) => setTechFilter(e.target.value)} aria-label="Technician"><option value="">All</option>{techs.map((t) => <option key={t} value={t}>{t}</option>)}</select></label>
+                  {search || statusFilter || techFilter ? <button type="button" className="text-xs text-muted underline" onClick={() => { setSearch(""); setStatusFilter(""); setTechFilter(""); }}>Clear</button> : null}
+                  <div className="ml-auto inline-flex rounded-lg border border-line bg-paper p-0.5" role="group" aria-label="View">
+                    <button type="button" className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium ${view === "grid" ? "bg-white shadow-sm" : "text-muted"}`} aria-pressed={view === "grid"} onClick={() => setView("grid")}><LayoutGrid className="h-3.5 w-3.5" /> Grid</button>
+                    <button type="button" className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium ${view === "list" ? "bg-white shadow-sm" : "text-muted"}`} aria-pressed={view === "list"} onClick={() => setView("list")}><List className="h-3.5 w-3.5" /> List</button>
+                  </div>
+                </div>
+                {filtered.length === 0 ? <p className="text-sm text-muted">{base.length === 0 ? "Nothing open in this lane." : "No matches."}</p> : null}
+                <div className={view === "grid" ? "grid gap-3 sm:grid-cols-2 xl:grid-cols-2" : "grid gap-2"}>
+                  {filtered.map((ticket) => (
+                    <TicketCard key={ticket.id} ticket={ticket} technicians={active.technicians}
+                      steps={active.steps.filter((step) => step.ticketId === ticket.id)}
+                      visit={active.visits.find((visit) => visit.ticketId === ticket.id && visit.status !== "done" && visit.status !== "cancelled")}
+                      onSaved={() => { void client.invalidateQueries({ queryKey: ["operations"] }); void client.invalidateQueries({ queryKey: ["tickets"] }); }} />
+                  ))}
+                </div>
+              </section>);
+          })()}
         </>
       ) : null}
     </div>
